@@ -8,8 +8,7 @@
     "build": "next build --webpack",
     "start": "next start -H 127.0.0.1 -p 3000",
     "start:mac": "bash ./scripts/start-mac.sh",
-    "lint": "next lint",
-    "postinstall": "npm rebuild better-sqlite3 --build-from-source"
+    "lint": "next lint"
   },
   "engines": {
     "node": ">=20.0.0"

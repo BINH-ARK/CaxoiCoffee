@@ -1,4 +1,4 @@
-import Database from "better-sqlite3";
+import type BetterSqlite3 from "better-sqlite3";
 import path from "path";
 import fs from "fs";
 import crypto from "node:crypto";
@@ -58,7 +58,7 @@ const SQL_SEED_FILE = path.join(DB_DIR, "sqlite_caxoi_cafe.sql");
 const BACKUPS_DIR = path.join(DB_DIR, "backups");
 const MAX_BACKUP_FILES = 30;
 
-let dbInstance: Database.Database | null = null;
+let dbInstance: BetterSqlite3.Database | null = null;
 
 /**
  * Đã vô hiệu hóa cơ chế tự động DROP TABLE khi file .sql đổi mtime để bảo vệ tuyệt đối dữ liệu đơn hàng & tài khoản.
@@ -161,7 +161,7 @@ export function executeSqlSeedFile(): boolean {
   }
 }
 
-function runNonDestructiveMigrations(db: Database.Database) {
+function runNonDestructiveMigrations(db: BetterSqlite3.Database) {
   ensureUsersSecurityColumns(db);
   ensureBusinessSettingsColumns(db);
   ensureOrdersColumns(db);
@@ -172,11 +172,57 @@ function runNonDestructiveMigrations(db: Database.Database) {
   ensureAuditLogsTable(db);
 }
 
+function openCompatibleSqlite(filePath: string): BetterSqlite3.Database {
+  try {
+    // Thử dùng better-sqlite3 trước (chạy trên máy Mac)
+    const BetterSqlite = Function('return require("better-sqlite3")')();
+    return new BetterSqlite(filePath, { timeout: 5000 });
+  } catch {
+    // Nếu máy chủ Hostinger báo lỗi GLIBC, tự động chuyển sang node:sqlite có sẵn trong Node 22
+    const { DatabaseSync } = Function('return require("node:sqlite")')();
+    const rawDb = new DatabaseSync(filePath);
+
+    const compatDb: Record<string, unknown> = {
+      prepare: (sql: string) => rawDb.prepare(sql),
+      exec: (sql: string) => rawDb.exec(sql),
+      close: () => rawDb.close(),
+      pragma: (pragmaStr: string, options?: { simple?: boolean }) => {
+        try {
+          if (options?.simple) {
+            const row = rawDb.prepare(`PRAGMA ${pragmaStr}`).get();
+            return row && typeof row === "object" ? Object.values(row)[0] : undefined;
+          }
+          return rawDb.exec(`PRAGMA ${pragmaStr}`);
+        } catch {
+          return undefined;
+        }
+      },
+      transaction: <T extends (...args: unknown[]) => unknown>(fn: T) => {
+        return (...args: Parameters<T>) => {
+          rawDb.exec("BEGIN");
+          try {
+            const result = fn(...args);
+            rawDb.exec("COMMIT");
+            return result;
+          } catch (err) {
+            try { rawDb.exec("ROLLBACK"); } catch {}
+            throw err;
+          }
+        };
+      },
+      backup: async (destPath: string) => {
+        fs.copyFileSync(filePath, destPath);
+      },
+    };
+    return compatDb as unknown as BetterSqlite3.Database;
+  }
+}
+
 /**
  * Lấy đối tượng kết nối SQLite (Singleton) kết nối trực tiếp caxoi_cafe.db
  * Áp dụng các PRAGMA tối ưu hóa hiệu năng và đồng bộ với DB Browser for SQLite
  */
-export function getSqliteDb(): Database.Database {
+export function getSqliteDb(): BetterSqlite3.Database {
   if (dbInstance) {
     return dbInstance;
   }
@@ -187,9 +233,7 @@ export function getSqliteDb(): Database.Database {
 
   const isNewDb = !fs.existsSync(PRIMARY_DB_FILE);
 
-  const db = new Database(PRIMARY_DB_FILE, {
-    timeout: 5000, // Chờ 5s nếu DB Browser for SQLite đang thực hiện transaction
-  });
+  const db = openCompatibleSqlite(PRIMARY_DB_FILE);
 
   // TỐI ƯU HÓA CHO DB BROWSER FOR SQLITE:
   db.pragma("journal_mode = WAL");
@@ -694,7 +738,7 @@ const HERO_SETTINGS_COLUMNS: ReadonlyArray<{
   { key: "qrXanhSmSubtitle", col: "qr_xanh_sm_subtitle" },
 ];
 
-export function ensureBusinessSettingsColumns(db: Database.Database) {
+export function ensureBusinessSettingsColumns(db: BetterSqlite3.Database) {
   try {
     const columns = (db.pragma("table_info(business_settings)") || []) as any[];
     if (!Array.isArray(columns) || columns.length === 0) return;
@@ -823,7 +867,7 @@ export function updateBusinessSettingsInSqlite(updates: Partial<BusinessSettings
 // 5. ĐƠN HÀNG (ORDERS & ORDER ITEMS)
 // ============================================================================
 
-function ensureOrdersColumns(db: Database.Database) {
+function ensureOrdersColumns(db: BetterSqlite3.Database) {
   try {
     const columns = (db.pragma("table_info(orders)") || []) as any[];
     const colNames = Array.isArray(columns) ? columns.map((c) => c.name) : [];
@@ -847,7 +891,7 @@ function ensureOrdersColumns(db: Database.Database) {
   }
 }
 
-function ensureWebhookTransactionsTable(db: Database.Database) {
+function ensureWebhookTransactionsTable(db: BetterSqlite3.Database) {
   try {
     db.exec(`
       CREATE TABLE IF NOT EXISTS webhook_transactions (
@@ -1061,7 +1105,7 @@ export function getOrderByIdFromSqlite(idOrCode: string): Order | null {
   }
 }
 
-function allocateNextOrderCodeTx(db: Database.Database): string {
+function allocateNextOrderCodeTx(db: BetterSqlite3.Database): string {
   const rows = db.prepare("SELECT order_code FROM orders WHERE order_code LIKE 'CF2611-%'").all() as Array<{
     order_code: string;
   }>;
@@ -1556,7 +1600,7 @@ export function getStatsFromSqlite(timeRange: string = "TODAY") {
 // ============================================================================
 // 7. PHÒNG ĐẶT NHÓM CÔNG SỞ (GROUP SESSIONS)
 // ============================================================================
-function ensureGroupSessionsColumns(db: Database.Database) {
+function ensureGroupSessionsColumns(db: BetterSqlite3.Database) {
   try {
     const columns = (db.pragma("table_info(group_sessions)") || []) as any[];
     if (!Array.isArray(columns) || columns.length === 0) return;
@@ -1736,7 +1780,7 @@ export function removeGroupItemFromSqlite(sessionCode: string, cartItemId: strin
 // 8. PHÂN QUYỀN & NHÂN VIÊN (RBAC: ROLES, PERMISSIONS & USERS)
 // ============================================================================
 
-export function ensureUsersSecurityColumns(db: Database.Database) {
+export function ensureUsersSecurityColumns(db: BetterSqlite3.Database) {
   try {
     const userTableCheck = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
     if (!userTableCheck) return;
@@ -2274,7 +2318,7 @@ export function findUserInSqlite(usernameOrPin: string, isPin = false): {
 // 10. QUẢN LÝ MÃ GIẢM GIÁ & VOUCHER (PROMOTIONS)
 // ============================================================================
 
-function ensurePromotionsColumns(db: Database.Database) {
+function ensurePromotionsColumns(db: BetterSqlite3.Database) {
   try {
     const columns = (db.pragma("table_info(promotions)") || []) as any[];
     if (!Array.isArray(columns) || columns.length === 0) return;
@@ -2647,7 +2691,7 @@ export function calculatePromotionDiscount(
 /**
  * Đóng và khởi động lại kết nối SQLite singleton (Dùng sau khi khôi phục / ghi đè file CSDL)
  */
-export function reloadSqliteDb(): Database.Database {
+export function reloadSqliteDb(): BetterSqlite3.Database {
   if (dbInstance) {
     try {
       dbInstance.close();
@@ -3163,7 +3207,7 @@ export async function restoreDatabaseFromUploadedBuffer(
 // ============================================================================
 // 13. RATE LIMITING BỀN VỮNG BẰNG SQLITE (CHỐNG SPAM / BRUTE-FORCE)
 // ============================================================================
-function ensureRateLimitsTable(db: Database.Database) {
+function ensureRateLimitsTable(db: BetterSqlite3.Database) {
   try {
     db.exec(`
       CREATE TABLE IF NOT EXISTS rate_limits (
@@ -3180,7 +3224,7 @@ function ensureRateLimitsTable(db: Database.Database) {
   }
 }
 
-function pruneExpiredRateLimits(db: Database.Database, now: number) {
+function pruneExpiredRateLimits(db: BetterSqlite3.Database, now: number) {
   try {
     // Xóa các khóa đã quá 30 phút không hoạt động và hết thời gian khóa
     const cutoff = now - 30 * 60 * 1000;
@@ -3304,7 +3348,7 @@ export function resetRateLimitInSqlite(key: string): void {
 // ============================================================================
 // 14. NHẬT KÝ KIỂM TOÁN (AUDIT LOGS) CHO CÁC THAO TÁC NHẠY CẢM
 // ============================================================================
-function ensureAuditLogsTable(db: Database.Database) {
+function ensureAuditLogsTable(db: BetterSqlite3.Database) {
   try {
     db.exec(`
       CREATE TABLE IF NOT EXISTS audit_logs (
@@ -3452,7 +3496,7 @@ export function getStaffByUsernameFromSqlite(username: string): {
   }
 }
 
-function ensurePasswordResetsTable(db: Database.Database) {
+function ensurePasswordResetsTable(db: BetterSqlite3.Database) {
   db.exec(`
     CREATE TABLE IF NOT EXISTS password_resets (
       user_id TEXT PRIMARY KEY,
