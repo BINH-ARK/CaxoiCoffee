@@ -152,7 +152,7 @@ export function executeSqlSeedFile(): boolean {
     try {
       db.pragma("wal_checkpoint(TRUNCATE)");
       fs.copyFileSync(PRIMARY_DB_FILE, MIRROR_DB_FILE);
-    } catch {}
+    } catch { }
 
     return true;
   } catch (error: any) {
@@ -186,15 +186,15 @@ function openCompatibleSqlite(filePath: string): BetterSqlite3.Database {
       prepare: (sql: string) => rawDb.prepare(sql),
       exec: (sql: string) => rawDb.exec(sql),
       close: () => rawDb.close(),
-      pragma: (pragmaStr: string, options?: { simple?: boolean }) => {
+      pragma: (pragmaStr: string) => {
         try {
-          if (options?.simple) {
-            const row = rawDb.prepare(`PRAGMA ${pragmaStr}`).get();
-            return row && typeof row === "object" ? Object.values(row)[0] : undefined;
+          if (pragmaStr.includes("=")) {
+            rawDb.exec(`PRAGMA ${pragmaStr}`);
+            return undefined;
           }
-          return rawDb.exec(`PRAGMA ${pragmaStr}`);
+          return rawDb.prepare(`PRAGMA ${pragmaStr}`).all();
         } catch {
-          return undefined;
+          return [];
         }
       },
       transaction: <T extends (...args: unknown[]) => unknown>(fn: T) => {
@@ -205,7 +205,7 @@ function openCompatibleSqlite(filePath: string): BetterSqlite3.Database {
             rawDb.exec("COMMIT");
             return result;
           } catch (err) {
-            try { rawDb.exec("ROLLBACK"); } catch {}
+            try { rawDb.exec("ROLLBACK"); } catch { }
             throw err;
           }
         };
@@ -250,7 +250,7 @@ export function getSqliteDb(): BetterSqlite3.Database {
       try {
         db.pragma("wal_checkpoint(TRUNCATE)");
         fs.copyFileSync(PRIMARY_DB_FILE, MIRROR_DB_FILE);
-      } catch {}
+      } catch { }
     }
   }
 
@@ -282,7 +282,7 @@ function syncMirrorFile() {
       dbInstance.pragma("wal_checkpoint(PASSIVE)");
       fs.copyFileSync(PRIMARY_DB_FILE, MIRROR_DB_FILE);
     }
-  } catch {}
+  } catch { }
 }
 
 /**
@@ -714,29 +714,29 @@ const HERO_SETTINGS_COLUMNS: ReadonlyArray<{
   col: string;
   required?: boolean;
 }> = [
-  { key: "heroBadgeBrand", col: "hero_badge_brand", required: true },
-  { key: "heroLocation", col: "hero_location" },
-  { key: "heroEyebrow", col: "hero_eyebrow" },
-  { key: "heroHeadlinePrimary", col: "hero_headline_primary" },
-  { key: "heroHeadlineHighlight", col: "hero_headline_highlight" },
-  { key: "heroDescription", col: "hero_description" },
-  { key: "heroServiceNote", col: "hero_service_note" },
-  { key: "heroPriceBadge1", col: "hero_price_badge_1" },
-  { key: "heroPriceBadge2", col: "hero_price_badge_2" },
-  { key: "heroPriceBadge3", col: "hero_price_badge_3" },
-  { key: "heroPrimaryCtaText", col: "hero_primary_cta_text" },
-  { key: "heroSecondaryCtaText", col: "hero_secondary_cta_text" },
-  { key: "heroWatermarkText", col: "hero_watermark_text" },
-  { key: "heroLogoUrl", col: "hero_logo_url", required: true },
-  { key: "heroMascotTitle", col: "hero_mascot_title" },
-  { key: "heroMascotSubtitle", col: "hero_mascot_subtitle" },
-  { key: "facebookUrl", col: "facebook_url", required: true },
-  { key: "qrFacebookTitle", col: "qr_facebook_title" },
-  { key: "qrFacebookSubtitle", col: "qr_facebook_subtitle" },
-  { key: "xanhSmUrl", col: "xanh_sm_url", required: true },
-  { key: "qrXanhSmTitle", col: "qr_xanh_sm_title" },
-  { key: "qrXanhSmSubtitle", col: "qr_xanh_sm_subtitle" },
-];
+    { key: "heroBadgeBrand", col: "hero_badge_brand", required: true },
+    { key: "heroLocation", col: "hero_location" },
+    { key: "heroEyebrow", col: "hero_eyebrow" },
+    { key: "heroHeadlinePrimary", col: "hero_headline_primary" },
+    { key: "heroHeadlineHighlight", col: "hero_headline_highlight" },
+    { key: "heroDescription", col: "hero_description" },
+    { key: "heroServiceNote", col: "hero_service_note" },
+    { key: "heroPriceBadge1", col: "hero_price_badge_1" },
+    { key: "heroPriceBadge2", col: "hero_price_badge_2" },
+    { key: "heroPriceBadge3", col: "hero_price_badge_3" },
+    { key: "heroPrimaryCtaText", col: "hero_primary_cta_text" },
+    { key: "heroSecondaryCtaText", col: "hero_secondary_cta_text" },
+    { key: "heroWatermarkText", col: "hero_watermark_text" },
+    { key: "heroLogoUrl", col: "hero_logo_url", required: true },
+    { key: "heroMascotTitle", col: "hero_mascot_title" },
+    { key: "heroMascotSubtitle", col: "hero_mascot_subtitle" },
+    { key: "facebookUrl", col: "facebook_url", required: true },
+    { key: "qrFacebookTitle", col: "qr_facebook_title" },
+    { key: "qrFacebookSubtitle", col: "qr_facebook_subtitle" },
+    { key: "xanhSmUrl", col: "xanh_sm_url", required: true },
+    { key: "qrXanhSmTitle", col: "qr_xanh_sm_title" },
+    { key: "qrXanhSmSubtitle", col: "qr_xanh_sm_subtitle" },
+  ];
 
 export function ensureBusinessSettingsColumns(db: BetterSqlite3.Database) {
   try {
@@ -945,7 +945,7 @@ function mapOrderRow(o: any, itemRows: any[]): Order {
     let opts = [];
     try {
       opts = JSON.parse(i.selected_options_json || "[]");
-    } catch {}
+    } catch { }
     return {
       id: i.id,
       orderId: i.order_id,
@@ -1228,15 +1228,15 @@ export function updateOrderStatusInSqlite(
   options?:
     | string
     | {
-        baristaNotes?: string;
-        paymentStatus?: string;
-        shipperName?: string;
-        shipperPhone?: string;
-        estimatedDeliveryTime?: string;
-        trackingNotes?: string;
-        deliveryNotes?: string;
-        deliveryFee?: number;
-      }
+      baristaNotes?: string;
+      paymentStatus?: string;
+      shipperName?: string;
+      shipperPhone?: string;
+      estimatedDeliveryTime?: string;
+      trackingNotes?: string;
+      deliveryNotes?: string;
+      deliveryFee?: number;
+    }
 ): boolean {
   try {
     const db = getSqliteDb();
@@ -1635,7 +1635,7 @@ export function getGroupSessionFromSqlite(code: string): GroupSession | null {
       try {
         db.prepare("UPDATE group_sessions SET status = 'EXPIRED' WHERE id = ?").run(row.id);
         syncMirrorFile();
-      } catch {}
+      } catch { }
     }
 
     const itemRows = db
@@ -1646,7 +1646,7 @@ export function getGroupSessionFromSqlite(code: string): GroupSession | null {
       if (i.item_payload_json) {
         try {
           return JSON.parse(i.item_payload_json);
-        } catch {}
+        } catch { }
       }
       return {
         cartItemId: i.cart_item_id || i.id,
@@ -2695,7 +2695,7 @@ export function reloadSqliteDb(): BetterSqlite3.Database {
   if (dbInstance) {
     try {
       dbInstance.close();
-    } catch {}
+    } catch { }
     dbInstance = null;
   }
   return getSqliteDb();
@@ -2789,10 +2789,10 @@ function pruneOldBackupSnapshots() {
       for (const old of files.slice(MAX_BACKUP_FILES)) {
         try {
           fs.unlinkSync(old.fullPath);
-        } catch {}
+        } catch { }
       }
     }
-  } catch {}
+  } catch { }
 }
 
 function resolveSafeBackupPath(filename: string, allowedExts: string[]): string | null {
@@ -2947,7 +2947,7 @@ export function importFullDatabaseFromJson(
     try {
       const db = getSqliteDb();
       db.pragma("foreign_keys = ON");
-    } catch {}
+    } catch { }
     return { success: false, message: "Lỗi khôi phục dữ liệu JSON. Vui lòng kiểm tra cấu trúc file sao lưu." };
   }
 }
@@ -3126,7 +3126,7 @@ export async function restoreDatabaseFromBackupSnapshot(
     if (dbInstance) {
       try {
         (dbInstance as any).close();
-      } catch {}
+      } catch { }
       dbInstance = null;
     }
 
@@ -3135,10 +3135,10 @@ export async function restoreDatabaseFromBackupSnapshot(
 
     try {
       fs.unlinkSync(PRIMARY_DB_FILE + "-wal");
-    } catch {}
+    } catch { }
     try {
       fs.unlinkSync(PRIMARY_DB_FILE + "-shm");
-    } catch {}
+    } catch { }
 
     const newDb = reloadSqliteDb();
     newDb.pragma("wal_checkpoint(TRUNCATE)");
@@ -3229,7 +3229,7 @@ function pruneExpiredRateLimits(db: BetterSqlite3.Database, now: number) {
     // Xóa các khóa đã quá 30 phút không hoạt động và hết thời gian khóa
     const cutoff = now - 30 * 60 * 1000;
     db.prepare("DELETE FROM rate_limits WHERE updated_at < ? AND locked_until < ?").run(cutoff, now);
-  } catch {}
+  } catch { }
 }
 
 export function checkRateLimitLockInSqlite(key: string): {
@@ -3312,8 +3312,8 @@ export function consumeRateLimitInSqlite(
     const lockedUntil = exceeded
       ? now + (lockDurationMs ?? windowRemainingMs)
       : nextCount >= maxRequests && lockDurationMs
-      ? now + lockDurationMs
-      : 0;
+        ? now + lockDurationMs
+        : 0;
 
     db.prepare(
       "UPDATE rate_limits SET count = ?, locked_until = ?, updated_at = ? WHERE key = ?"
@@ -3342,7 +3342,7 @@ export function resetRateLimitInSqlite(key: string): void {
   try {
     const db = getSqliteDb();
     db.prepare("DELETE FROM rate_limits WHERE key = ?").run(key);
-  } catch {}
+  } catch { }
 }
 
 // ============================================================================
@@ -3439,7 +3439,7 @@ export function getAuditLogsFromSqlite(filters?: {
       if (r.metadata_json) {
         try {
           metadata = JSON.parse(r.metadata_json);
-        } catch {}
+        } catch { }
       }
       return {
         id: Number(r.id),
