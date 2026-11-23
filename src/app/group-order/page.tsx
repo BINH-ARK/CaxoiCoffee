@@ -255,7 +255,7 @@ export default function GroupOrderIndexPage() {
             </div>
             <div className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-amber-500 shrink-0" />
-              <span>Giao tận tầng & bàn làm việc trong 15-25 phút</span>
+              <span>Giao tận nơi trong 15-25 phút</span>
             </div>
           </div>
         </div>

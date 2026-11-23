@@ -989,25 +989,39 @@ async function runMySqlAutoMigration(): Promise<void> {
       }
     }
 
-    // Tự động khởi tạo tài khoản admin (SUPER_ADMIN) nếu bảng users trống và có INIT_ADMIN_PASSWORD
+    // Tự động khởi tạo tài khoản SUPER_ADMIN từ ADMIN_USERNAME & ADMIN_PASSWORD (hoặc INIT_ADMIN_PASSWORD)
+    const envAdminUsername = (process.env.ADMIN_USERNAME || "admin").trim().toLowerCase();
+    const envInitPwd = (process.env.ADMIN_PASSWORD || process.env.INIT_ADMIN_PASSWORD || "").trim();
+    const envAdminEmail = process.env.ADMIN_EMAIL?.trim() || null;
+
+    if (envAdminUsername && envInitPwd.length >= 8) {
+      const [adminRows] = await conn.query<RowDataPacket[]>(
+        `SELECT id FROM \`users\` WHERE LOWER(username) = ? LIMIT 1`,
+        [envAdminUsername]
+      );
+      if (adminRows.length === 0) {
+        await conn.query(
+          `INSERT INTO \`users\` (\`id\`, \`username\`, \`password_hash\`, \`plain_password\`, \`pin\`, \`full_name\`, \`phone\`, \`email\`, \`role_id\`, \`is_active\`, \`token_version\`)
+           VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, 1, 1, 1)`,
+          [
+            crypto.randomUUID(),
+            envAdminUsername,
+            hashPassword(envInitPwd),
+            "Quản Trị Viên (Chủ Quán)",
+            "0905249733",
+            envAdminEmail,
+          ]
+        );
+        console.info(
+          `[MySQL Auto-Migration] Đã tự động tạo tài khoản "${envAdminUsername}" (SUPER_ADMIN) từ biến môi trường.`
+        );
+      }
+    }
+
     const [userCountRows] = await conn.query<RowDataPacket[]>(`SELECT COUNT(*) as cnt FROM \`users\``);
     const totalUsers = Number(userCountRows[0]?.cnt || 0);
-    const envInitPwd = process.env.INIT_ADMIN_PASSWORD?.trim();
 
-    if (totalUsers === 0 && envInitPwd) {
-      await conn.query(
-        `INSERT INTO \`users\` (\`id\`, \`username\`, \`password_hash\`, \`plain_password\`, \`pin\`, \`full_name\`, \`phone\`, \`email\`, \`role_id\`, \`is_active\`, \`token_version\`)
-         VALUES (?, ?, ?, NULL, NULL, ?, ?, NULL, 1, 1, 1)`,
-        [
-          "a0000000-0000-0000-0000-000000000001",
-          "admin",
-          hashPassword(envInitPwd),
-          "Quản Trị Viên (Chủ Quán)",
-          "0905249733",
-        ]
-      );
-      console.info('[MySQL Auto-Migration] Đã tự động tạo tài khoản "admin" (SUPER_ADMIN) từ INIT_ADMIN_PASSWORD.');
-    } else if (totalUsers > 0) {
+    if (totalUsers > 0) {
       // Nâng cấp bảo mật cho user đã tồn tại (plain_password / INIT_REQUIRED / unhashed PIN)
       const [existingUsers] = await conn.query<RowDataPacket[]>(`
         SELECT u.id, u.username, u.password_hash, u.plain_password, u.pin, r.name as role_name

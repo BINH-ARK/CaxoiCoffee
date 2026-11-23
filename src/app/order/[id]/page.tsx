@@ -476,53 +476,28 @@ export default function OrderTrackingPage() {
 
           <div className="flex flex-col sm:flex-row items-center gap-6 justify-center">
             {/* Mèo Xòi directly holding the real dynamic VietQR card */}
-            <div className="relative pt-[132px] sm:pt-[144px] px-5 shrink-0 select-none">
-              {/* Cat Head peeking behind top edge of the VietQR card */}
-              <div className="absolute top-2 left-1/2 -translate-x-1/2 w-[150px] sm:w-[164px] z-0 pointer-events-none -rotate-[5deg] drop-shadow-[0_8px_14px_rgba(120,53,15,0.16)]">
-                <Image
-                  src="/images/meo-xoi-qr-head.png"
-                  alt="Mèo Xòi cầm mã VietQR"
-                  width={472}
-                  height={513}
-                  unoptimized
-                  priority
-                  className="w-full h-auto object-contain"
-                />
-              </div>
+            <div className="relative w-full max-w-[320px] sm:max-w-[360px] shrink-0 select-none rounded-2xl overflow-hidden shadow-md border border-amber-200/80 bg-[#FAF3D9]">
+              <Image
+                src="/images/meo-xoi-qr-holder.jpg"
+                alt="Mèo Xòi cầm mã VietQR"
+                width={896}
+                height={1200}
+                unoptimized
+                priority
+                className="w-full h-auto block object-contain"
+              />
 
-              {/* Real Dynamic VietQR Card */}
-              <div className="relative z-10 bg-white p-3 rounded-2xl shadow-lg border-2 border-amber-200">
+              {/* Real Dynamic VietQR printed naturally onto the white card between the cat's paws */}
+              <div className="absolute left-[28.5%] top-[50.5%] w-[44%] h-[42.5%] flex items-center justify-center pointer-events-none">
                 <Image
                   src={vietQrUrl}
                   alt="VietQR Transfer"
-                  width={205}
-                  height={240}
+                  width={220}
+                  height={260}
                   unoptimized
                   priority
-                  className="rounded-lg object-contain"
+                  className="w-full h-full object-contain mix-blend-multiply"
                 />
-
-                {/* Left & Right Cat Paws gripping the VietQR card edges */}
-                <div className="absolute -left-5 top-[58%] -translate-y-1/2 w-11 sm:w-12 z-20 pointer-events-none drop-shadow-[0_4px_8px_rgba(0,0,0,0.2)]">
-                  <Image
-                    src="/images/meo-xoi-qr-paw-left.png"
-                    alt=""
-                    width={135}
-                    height={153}
-                    unoptimized
-                    className="w-full h-auto object-contain"
-                  />
-                </div>
-                <div className="absolute -right-5 top-[58%] -translate-y-1/2 w-11 sm:w-12 z-20 pointer-events-none drop-shadow-[0_4px_8px_rgba(0,0,0,0.2)]">
-                  <Image
-                    src="/images/meo-xoi-qr-paw-right.png"
-                    alt=""
-                    width={129}
-                    height={151}
-                    unoptimized
-                    className="w-full h-auto object-contain"
-                  />
-                </div>
               </div>
             </div>
 

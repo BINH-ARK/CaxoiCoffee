@@ -44,6 +44,24 @@ export async function POST(request: Request) {
     }
 
     if (action === "REQUEST_OTP") {
+      const email = String(body.email || "").trim().toLowerCase();
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return NextResponse.json(
+          { success: false, message: "Vui lòng nhập địa chỉ email hợp lệ để nhận mã OTP." },
+          { status: 400 }
+        );
+      }
+
+      const registeredEmail = staff.email?.trim().toLowerCase() || "";
+      if (registeredEmail && registeredEmail !== email) {
+        return NextResponse.json(
+          { success: false, message: "Email không khớp với email đã đăng ký của tài khoản này." },
+          { status: 400 }
+        );
+      }
+
+      const targetEmail = registeredEmail || email;
+
       const otp = String(crypto.randomInt(100000, 1000000));
       const saved = await savePasswordResetOtpInMySql(staff.id, otp, 10 * 60 * 1000);
       if (!saved) {
@@ -53,14 +71,11 @@ export async function POST(request: Request) {
         );
       }
 
-      let mailSent = false;
-      if (staff.email) {
-        const res = await sendPasswordResetOtpEmail(staff.email, staff.fullName, staff.username, otp);
-        mailSent = res.sent;
-      }
+      const mailRes = await sendPasswordResetOtpEmail(targetEmail, staff.fullName, staff.username, otp);
+      const mailSent = mailRes.sent;
 
       console.info(
-        `[Cà Xòi Forgot Password OTP] Tài khoản @${staff.username} -> Mã OTP: ${otp} (hiệu lực 10 phút)`
+        `[Cà Xòi Forgot Password OTP] Tài khoản @${staff.username} (${targetEmail}) -> Mã OTP: ${otp} (hiệu lực 10 phút)`
       );
 
       await recordAuditLogInMySql({
@@ -70,20 +85,30 @@ export async function POST(request: Request) {
         action: "AUTH_FORGOT_PASSWORD_OTP",
         targetType: "AUTH",
         targetId: staff.id,
-        summary: `Yêu cầu mã OTP đặt lại mật khẩu cho @${staff.username} (${mailSent ? "đã gửi email" : "mã nội bộ"})`,
+        summary: `Yêu cầu mã OTP đặt lại mật khẩu cho @${staff.username} tới ${targetEmail} (${mailSent ? "đã gửi email" : "lỗi gửi mail / chế độ local"})`,
         ipAddress: ip,
       });
 
       const isDev = process.env.NODE_ENV !== "production";
+      if (!mailSent && !isDev) {
+        return NextResponse.json(
+          {
+            success: false,
+            message:
+              mailRes.message ||
+              "Không thể gửi mã OTP tới email. Vui lòng kiểm tra cấu hình SMTP trên máy chủ.",
+          },
+          { status: 500 }
+        );
+      }
+
       return NextResponse.json({
         success: true,
         mailSent,
         devOtp: !mailSent && isDev ? otp : undefined,
         message: mailSent
-          ? `Đã gửi mã OTP 6 số tới email đã đăng ký của @${staff.username}. Vui lòng kiểm tra hộp thư!`
-          : isDev
-          ? `Đã tạo mã OTP khôi phục (chưa cấu hình Gmail SMTP nên hiển thị mã dùng thử nội bộ bên dưới).`
-          : `Đã tạo mã OTP khôi phục mật khẩu. Vui lòng liên hệ quản trị viên hệ thống hoặc xem log máy chủ để nhận mã.`,
+          ? `Đã gửi mã OTP 6 số tới email ${targetEmail}. Vui lòng kiểm tra hộp thư (kể cả mục Spam)!`
+          : `Đã tạo mã OTP khôi phục (chưa cấu hình Gmail SMTP nên hiển thị mã dùng thử nội bộ bên dưới).`,
       });
     }
 
