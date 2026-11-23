@@ -82,13 +82,31 @@ const DB_DIR = path.join(process.cwd(), "database");
 const BACKUPS_DIR = path.join(DB_DIR, "backups");
 const MAX_BACKUP_FILES = 30;
 
+function cleanEnvValue(value?: string): string {
+  if (!value) return "";
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1).trim();
+  }
+  return trimmed;
+}
+
 function getDbConfig() {
+  const host = cleanEnvValue(process.env.MYSQL_HOST || process.env.DB_HOST) || "127.0.0.1";
+  const port = Number(cleanEnvValue(process.env.MYSQL_PORT || process.env.DB_PORT)) || 3306;
+  const user = cleanEnvValue(process.env.MYSQL_USER || process.env.DB_USER) || "root";
+  const password = cleanEnvValue(process.env.MYSQL_PASSWORD || process.env.DB_PASSWORD);
+  const database = cleanEnvValue(process.env.MYSQL_DATABASE || process.env.DB_DATABASE) || "caxoi_cafe";
+
   return {
-    host: process.env.MYSQL_HOST || "127.0.0.1",
-    port: Number(process.env.MYSQL_PORT) || 3306,
-    user: process.env.MYSQL_USER || "root",
-    password: process.env.MYSQL_PASSWORD || "",
-    database: process.env.MYSQL_DATABASE || "caxoi_cafe",
+    host,
+    port,
+    user,
+    password,
+    database,
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,

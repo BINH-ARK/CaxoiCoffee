@@ -84,10 +84,15 @@ function LoginFormContent() {
         body: JSON.stringify(payload),
       });
 
-      const data = await res.json();
+      const data = await res.json().catch(() => null);
 
-      if (!res.ok || !data.success) {
-        throw new Error(data.message || "Đăng nhập thất bại");
+      if (!res.ok || !data?.success) {
+        throw new Error(
+          data?.message ||
+            (res.status >= 500
+              ? `Máy chủ tạm thời gặp lỗi (${res.status}). Vui lòng thử lại sau.`
+              : "Đăng nhập thất bại")
+        );
       }
 
       const role = data.user.role;

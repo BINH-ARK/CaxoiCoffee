@@ -6,7 +6,7 @@
     "dev": "next dev --webpack -H 127.0.0.1 -p 3000",
     "dev:lan": "next dev --webpack -H 0.0.0.0 -p 3000",
     "build": "next build --webpack",
-    "start": "next start -H 127.0.0.1 -p 3000",
+    "start": "next start",
     "start:mac": "bash ./scripts/start-mac.sh",
     "lint": "next lint"
   },

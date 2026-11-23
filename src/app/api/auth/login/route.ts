@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { signAuthToken, COOKIE_NAME } from "@/lib/auth";
-import { findUserInMySql, recordAuditLogInMySql } from "@/lib/mysql";
+import { ensureMySqlInitialized, findUserInMySql, recordAuditLogInMySql } from "@/lib/mysql";
 import { verifyPassword } from "@/lib/password";
 import { getTrustedClientIp } from "@/lib/serverAuth";
 import {
@@ -20,6 +20,21 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const { username, password, pin, loginType = "CREDENTIALS" } = body;
+
+    // Xác minh kết nối MySQL trước để không báo nhầm sai mật khẩu khi DB lỗi
+    try {
+      await ensureMySqlInitialized();
+    } catch (dbErr) {
+      console.error("[Auth Login] MySQL unavailable:", dbErr);
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "Không thể kết nối cơ sở dữ liệu MySQL. Vui lòng kiểm tra cấu hình MYSQL_HOST, MYSQL_USER, MYSQL_PASSWORD, MYSQL_DATABASE trên server.",
+        },
+        { status: 503 }
+      );
+    }
 
     // Khóa bền vững bằng MySQL theo tổ hợp IP + tài khoản (hoặc kênh PIN toàn cục)
     const ipKey = `login:ip:${ip}`;
@@ -156,8 +171,18 @@ export async function POST(request: Request) {
     });
 
     return response;
-  } catch (error) {
+  } catch (error: any) {
     console.error("[Auth Login Error]", error);
+    const errMsg = typeof error?.message === "string" ? error.message : "";
+    if (errMsg.includes("JWT_SECRET")) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Thiếu hoặc sai cấu hình JWT_SECRET trên server (cần tối thiểu 32 ký tự).",
+        },
+        { status: 500 }
+      );
+    }
     return NextResponse.json(
       { success: false, message: "Lỗi xử lý đăng nhập. Vui lòng thử lại." },
       { status: 500 }
