@@ -308,10 +308,102 @@ async function addColumnIfMissing(
   }
 }
 
+const REQUIRED_MYSQL_TABLES = [
+  "roles",
+  "permissions",
+  "role_permissions",
+  "users",
+  "categories",
+  "products",
+  "product_variants",
+  "product_options",
+  "product_option_values",
+  "business_settings",
+  "companies",
+  "promotions",
+  "group_sessions",
+  "group_session_items",
+  "orders",
+  "order_items",
+  "webhook_transactions",
+  "rate_limits",
+  "audit_logs",
+  "password_resets",
+];
+
+async function syncEnvSuperAdmin(conn: PoolConnection): Promise<void> {
+  const envAdminUsername = (process.env.ADMIN_USERNAME || "admin").trim().toLowerCase();
+  const envInitPwd = (process.env.ADMIN_PASSWORD || process.env.INIT_ADMIN_PASSWORD || "").trim();
+  const envAdminEmail = process.env.ADMIN_EMAIL?.trim() || null;
+
+  if (!envAdminUsername || envInitPwd.length < 8) {
+    return;
+  }
+
+  const [adminRows] = await conn.query<RowDataPacket[]>(
+    `SELECT id, password_hash, is_active, role_id, email FROM \`users\` WHERE LOWER(username) = ? LIMIT 1`,
+    [envAdminUsername]
+  );
+  if (adminRows.length === 0) {
+    await conn.query(
+      `INSERT INTO \`users\` (\`id\`, \`username\`, \`password_hash\`, \`plain_password\`, \`pin\`, \`full_name\`, \`phone\`, \`email\`, \`role_id\`, \`is_active\`, \`token_version\`)
+       VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, 1, 1, 1)`,
+      [
+        crypto.randomUUID(),
+        envAdminUsername,
+        hashPassword(envInitPwd),
+        "Quản Trị Viên (Chủ Quán)",
+        "0905249733",
+        envAdminEmail,
+      ]
+    );
+    console.info(
+      `[MySQL Auto-Migration] Đã tự động tạo tài khoản "${envAdminUsername}" (SUPER_ADMIN) từ biến môi trường.`
+    );
+  } else {
+    const existingAdmin = adminRows[0];
+    const needsPasswordSync = !verifyPassword(envInitPwd, String(existingAdmin.password_hash || ""));
+    const needsActivation = !existingAdmin.is_active || Number(existingAdmin.role_id) !== 1;
+    const needsEmailSync = Boolean(envAdminEmail && !existingAdmin.email);
+
+    if (needsPasswordSync || needsActivation || needsEmailSync) {
+      await conn.query(
+        `UPDATE \`users\`
+         SET \`password_hash\` = ?, \`plain_password\` = NULL, \`is_active\` = 1, \`role_id\` = 1, \`email\` = COALESCE(?, \`email\`)
+         WHERE \`id\` = ?`,
+        [
+          needsPasswordSync ? hashPassword(envInitPwd) : existingAdmin.password_hash,
+          envAdminEmail,
+          existingAdmin.id,
+        ]
+      );
+      await conn.query(`DELETE FROM \`rate_limits\` WHERE \`key\` = ?`, [`login:user:${envAdminUsername}`]);
+      console.info(
+        `[MySQL Auto-Migration] Đã đồng bộ mật khẩu/trạng thái tài khoản "${envAdminUsername}" (SUPER_ADMIN) từ biến môi trường.`
+      );
+    }
+  }
+}
+
 async function runMySqlAutoMigration(): Promise<void> {
   const currentPool = getMySqlPool();
   const conn = await currentPool.getConnection();
   try {
+    // Fast-path cho Serverless (Vercel): nếu đủ 20 bảng & đã có dữ liệu nền tảng, bỏ qua ~60 câu lệnh migration lặp lại
+    const [tblRows] = await conn.query<RowDataPacket[]>(
+      `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE()`
+    );
+    const existingTables = new Set(tblRows.map((r) => String(r.TABLE_NAME || "").toLowerCase()));
+    if (REQUIRED_MYSQL_TABLES.every((t) => existingTables.has(t))) {
+      const [seedCheck] = await conn.query<RowDataPacket[]>(
+        `SELECT (SELECT COUNT(*) FROM \`products\`) AS p_cnt, (SELECT COUNT(*) FROM \`roles\`) AS r_cnt`
+      );
+      if (Number(seedCheck[0]?.p_cnt || 0) > 0 && Number(seedCheck[0]?.r_cnt || 0) > 0) {
+        await syncEnvSuperAdmin(conn);
+        return;
+      }
+    }
+
     // 1. Tạo toàn bộ các bảng chuẩn utf8mb4 nếu chưa tồn tại
     await conn.query(`
       CREATE TABLE IF NOT EXISTS \`roles\` (
@@ -989,56 +1081,9 @@ async function runMySqlAutoMigration(): Promise<void> {
       }
     }
 
-    // Tự động khởi tạo tài khoản SUPER_ADMIN từ ADMIN_USERNAME & ADMIN_PASSWORD (hoặc INIT_ADMIN_PASSWORD)
-    const envAdminUsername = (process.env.ADMIN_USERNAME || "admin").trim().toLowerCase();
+    // Tự động khởi tạo/đồng bộ tài khoản SUPER_ADMIN từ ADMIN_USERNAME & ADMIN_PASSWORD
     const envInitPwd = (process.env.ADMIN_PASSWORD || process.env.INIT_ADMIN_PASSWORD || "").trim();
-    const envAdminEmail = process.env.ADMIN_EMAIL?.trim() || null;
-
-    if (envAdminUsername && envInitPwd.length >= 8) {
-      const [adminRows] = await conn.query<RowDataPacket[]>(
-        `SELECT id, password_hash, is_active, role_id, email FROM \`users\` WHERE LOWER(username) = ? LIMIT 1`,
-        [envAdminUsername]
-      );
-      if (adminRows.length === 0) {
-        await conn.query(
-          `INSERT INTO \`users\` (\`id\`, \`username\`, \`password_hash\`, \`plain_password\`, \`pin\`, \`full_name\`, \`phone\`, \`email\`, \`role_id\`, \`is_active\`, \`token_version\`)
-           VALUES (?, ?, ?, NULL, NULL, ?, ?, ?, 1, 1, 1)`,
-          [
-            crypto.randomUUID(),
-            envAdminUsername,
-            hashPassword(envInitPwd),
-            "Quản Trị Viên (Chủ Quán)",
-            "0905249733",
-            envAdminEmail,
-          ]
-        );
-        console.info(
-          `[MySQL Auto-Migration] Đã tự động tạo tài khoản "${envAdminUsername}" (SUPER_ADMIN) từ biến môi trường.`
-        );
-      } else {
-        const existingAdmin = adminRows[0];
-        const needsPasswordSync = !verifyPassword(envInitPwd, String(existingAdmin.password_hash || ""));
-        const needsActivation = !existingAdmin.is_active || Number(existingAdmin.role_id) !== 1;
-        const needsEmailSync = Boolean(envAdminEmail && !existingAdmin.email);
-
-        if (needsPasswordSync || needsActivation || needsEmailSync) {
-          await conn.query(
-            `UPDATE \`users\`
-             SET \`password_hash\` = ?, \`plain_password\` = NULL, \`is_active\` = 1, \`role_id\` = 1, \`email\` = COALESCE(?, \`email\`)
-             WHERE \`id\` = ?`,
-            [
-              needsPasswordSync ? hashPassword(envInitPwd) : existingAdmin.password_hash,
-              envAdminEmail,
-              existingAdmin.id,
-            ]
-          );
-          await conn.query(`DELETE FROM \`rate_limits\` WHERE \`key\` = ?`, [`login:user:${envAdminUsername}`]);
-          console.info(
-            `[MySQL Auto-Migration] Đã đồng bộ mật khẩu/trạng thái tài khoản "${envAdminUsername}" (SUPER_ADMIN) từ biến môi trường.`
-          );
-        }
-      }
-    }
+    await syncEnvSuperAdmin(conn);
 
     const [userCountRows] = await conn.query<RowDataPacket[]>(`SELECT COUNT(*) as cnt FROM \`users\``);
     const totalUsers = Number(userCountRows[0]?.cnt || 0);
