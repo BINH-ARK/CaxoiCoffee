@@ -1,0 +1,135 @@
+"use client";
+
+import React, { useState } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { Coffee, ShoppingBag, Users, Sparkles, Phone, Truck } from "lucide-react";
+import { useCart } from "@/context/CartContext";
+import { formatVND, XANH_SM_ONELINK, getTelHref, sanitizeExternalUrl } from "@/lib/utils";
+import { useBusinessSettings } from "@/lib/useBusinessSettings";
+import CustomerOrderLookupModal from "@/components/CustomerOrderLookupModal";
+
+export default function Header() {
+  const pathname = usePathname();
+  const { totalItems, totalPrice } = useCart();
+  const settings = useBusinessSettings();
+  const [isLookupOpen, setIsLookupOpen] = useState(false);
+
+  // Hide customer header on staff management routes
+  if (pathname?.startsWith("/admin") || pathname?.startsWith("/kds")) {
+    return null;
+  }
+
+  return (
+    <>
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-pink-100 shadow-sm transition-all">
+        <div className="max-w-7xl mx-auto px-4 sm:px-8 py-2 flex items-center justify-between">
+          {/* Brand Logo & Slogan */}
+          <Link href="/" className="flex items-center gap-2.5 group">
+            <div className="w-11 h-11 rounded-2xl border border-pink-200 overflow-hidden shadow-sm group-hover:scale-105 transition-transform bg-[#FFD1E3] flex items-center justify-center relative">
+              <Image
+                src={settings.heroLogoUrl || "/images/ca-xoi-logo.jpg"}
+                alt="Logo Cà Xòi"
+                width={44}
+                height={44}
+                unoptimized
+                className="w-full h-full object-cover"
+                priority
+              />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-black text-xl text-coffee-950 tracking-tight leading-none flex items-center gap-1">
+                  Cà Xòi
+                  <span className="text-rose-500 text-xs">🐾</span>
+                </span>
+                <span className="hidden sm:inline-block text-[10px] font-bold px-2 py-0.5 rounded-full bg-pink-100 text-rose-700 border border-pink-200">
+                  Đà Nẵng
+                </span>
+              </div>
+              <p className="text-[11px] text-rose-700 font-bold leading-tight mt-0.5">
+                {`${settings.heroHeadlinePrimary} ${settings.heroHeadlineHighlight}`.replace(/[“”"]/g, "")} ☕
+              </p>
+            </div>
+          </Link>
+
+          {/* Customer Navigation Tabs */}
+          <nav className="flex items-center gap-1.5 sm:gap-2.5">
+            <Link
+              href="/#menu"
+              className="flex items-center gap-1 text-xs sm:text-sm font-semibold text-coffee-800 hover:text-rose-600 px-2.5 sm:px-3 py-1.5 rounded-xl hover:bg-pink-50/90 transition-colors"
+            >
+              <Coffee className="w-4 h-4 text-rose-500" />
+              <span>Thực đơn</span>
+            </Link>
+
+            <Link
+              href="/group-order"
+              className="flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-coffee-800 hover:text-rose-600 px-2.5 sm:px-3 py-1.5 rounded-xl hover:bg-pink-50/90 transition-colors"
+              title="Đặt hàng nhóm cho văn phòng"
+            >
+              <Users className="w-4 h-4 text-rose-500" />
+              <span>Gom đơn phòng</span>
+            </Link>
+
+            {/* Tra cứu đơn hàng */}
+            <button
+              type="button"
+              onClick={() => setIsLookupOpen(true)}
+              className="flex items-center gap-1.5 text-xs sm:text-sm font-semibold text-coffee-800 hover:text-rose-600 px-2.5 sm:px-3 py-1.5 rounded-xl hover:bg-pink-50/90 transition-colors"
+              title="Tra cứu tình trạng đơn hàng & giao hàng"
+            >
+              <Truck className="w-4 h-4 text-rose-500" />
+              <span>Tra cứu đơn</span>
+            </button>
+
+            {/* Xanh SM Ngon Direct Link — đồng bộ sắc xanh #09CCCD */}
+            <a
+              href={sanitizeExternalUrl(settings.xanhSmUrl, XANH_SM_ONELINK)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="hidden sm:inline-flex items-center gap-1.5 text-xs font-bold bg-[#09CCCD] hover:bg-[#07B2B3] text-white px-3 py-1.5 rounded-xl border border-[#7CEEEE]/60 shadow-xs transition-all active:scale-95"
+              title="Mở ứng dụng Xanh SM Ngon để đặt món Cà Xòi giao bằng xe điện"
+            >
+              <span className="w-2 h-2 rounded-full bg-white animate-pulse" />
+              <span>Đặt Xanh SM</span>
+            </a>
+
+            {/* Hotline Quick Call — đồng bộ sắc hồng Cà Xòi */}
+            <a
+              href={getTelHref(settings.hotline)}
+              className="hidden md:flex items-center gap-1.5 text-xs font-bold text-coffee-900 bg-pink-50 hover:bg-pink-100 border border-pink-200 px-3 py-1.5 rounded-xl transition-colors shadow-xs"
+              title={`Hotline Cà Xòi: ${settings.hotline}`}
+            >
+              <Phone className="w-3.5 h-3.5 text-pink-600" />
+              <span>{settings.hotline}</span>
+            </a>
+
+            {/* Cart Quick Button — CTA nổi bật số 1 trên Header */}
+            <Link
+              href="/cart"
+              className="relative flex items-center gap-2 bg-coffee-900 hover:bg-coffee-950 text-white px-3.5 sm:px-4 py-2 rounded-xl shadow-md transition-all active:scale-95"
+            >
+              <ShoppingBag className="w-4 h-4 text-pink-200" />
+              <span className="hidden sm:inline text-xs font-bold">
+                {totalItems > 0 ? formatVND(totalPrice) : "Giỏ hàng"}
+              </span>
+              {totalItems > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 bg-gradient-to-r from-pink-500 to-rose-500 text-white text-[11px] font-black w-5 h-5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+                  {totalItems}
+                </span>
+              )}
+            </Link>
+          </nav>
+        </div>
+      </header>
+
+      {/* Customer Order Lookup Modal */}
+      <CustomerOrderLookupModal
+        isOpen={isLookupOpen}
+        onClose={() => setIsLookupOpen(false)}
+      />
+    </>
+  );
+}

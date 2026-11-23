@@ -1,0 +1,268 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: #fff7fa;
+  --foreground: #420e26;
+}
+
+body {
+  color: var(--foreground);
+  background: var(--background);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Custom scrollbar for horizontal category chips */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Print thermal receipt & cup label styles */
+@media print {
+  body * {
+    visibility: hidden;
+  }
+  .printable-area, .printable-area * {
+    visibility: visible;
+  }
+  .printable-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+  }
+}
+
+/* Seamless GPU-accelerated background watermark drift (exact 1-tile loop) */
+@keyframes watermark-drift {
+  0% {
+    transform: translate3d(0, 0, 0);
+  }
+  100% {
+    transform: translate3d(var(--wm-dx, -160px), var(--wm-dy, -78px), 0);
+  }
+}
+
+.animate-watermark-drift {
+  animation: watermark-drift var(--wm-duration, 16s) linear infinite;
+  will-change: transform;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-watermark-drift,
+  .animate-xoi-confetti,
+  .animate-xoi-pop,
+  .animate-xoi-cat,
+  .animate-xoi-sway,
+  .animate-xoi-drop,
+  .btn-xoi-glow,
+  .btn-xoi-shimmer::after,
+  .animate-xoi-wander-a,
+  .animate-xoi-wander-b {
+    animation: none;
+  }
+}
+
+/* Celebratory "Xòi xin cảm ơn" payment success animations */
+@keyframes xoi-confetti-fall {
+  0% {
+    transform: translate3d(0, -12vh, 0) rotate(0deg);
+    opacity: 0;
+  }
+  12% {
+    opacity: 1;
+  }
+  85% {
+    opacity: 1;
+  }
+  100% {
+    transform: translate3d(var(--cf-drift, 24px), 105vh, 0) rotate(var(--cf-rot, 540deg));
+    opacity: 0;
+  }
+}
+
+@keyframes xoi-pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.82) translateY(18px);
+  }
+  65% {
+    opacity: 1;
+    transform: scale(1.03) translateY(-2px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes xoi-cat-bounce {
+  0%, 100% {
+    transform: translateY(0) rotate(-1deg);
+  }
+  50% {
+    transform: translateY(-7px) rotate(2deg);
+  }
+}
+
+.animate-xoi-confetti {
+  animation: xoi-confetti-fall var(--cf-dur, 3.6s) cubic-bezier(0.22, 0.61, 0.36, 1) var(--cf-delay, 0s) infinite;
+  will-change: transform, opacity;
+}
+
+.animate-xoi-pop {
+  animation: xoi-pop-in 0.42s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+.animate-xoi-cat {
+  animation: xoi-cat-bounce 2.2s ease-in-out infinite;
+}
+
+/* Gentle wistful animations for order cancellation notification */
+@keyframes xoi-cat-sway {
+  0%, 100% {
+    transform: translateY(0) rotate(-3.5deg);
+  }
+  50% {
+    transform: translateY(-4px) rotate(3.5deg);
+  }
+}
+
+@keyframes xoi-float-drop {
+  0% {
+    transform: translate3d(0, -10vh, 0) scale(0.85);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.75;
+  }
+  85% {
+    opacity: 0.65;
+  }
+  100% {
+    transform: translate3d(var(--drop-drift, 14px), 102vh, 0) scale(1.05);
+    opacity: 0;
+  }
+}
+
+.animate-xoi-sway {
+  animation: xoi-cat-sway 2.8s ease-in-out infinite;
+  transform-origin: bottom center;
+}
+
+.animate-xoi-drop {
+  animation: xoi-float-drop var(--drop-dur, 4.6s) ease-in-out var(--drop-delay, 0s) infinite;
+  will-change: transform, opacity;
+}
+
+/* Tactile micro-interaction effects for key customer CTA buttons */
+@keyframes xoi-shimmer-sweep {
+  0%, 58% {
+    transform: translate3d(-140%, 0, 0) skewX(-22deg);
+    opacity: 0;
+  }
+  64% {
+    opacity: 0.55;
+  }
+  88% {
+    transform: translate3d(240%, 0, 0) skewX(-22deg);
+    opacity: 0.55;
+  }
+  100% {
+    transform: translate3d(240%, 0, 0) skewX(-22deg);
+    opacity: 0;
+  }
+}
+
+@keyframes xoi-cta-glow {
+  0%, 100% {
+    box-shadow: 0 10px 24px -8px rgba(236, 72, 153, 0.38), 0 4px 12px -4px rgba(244, 63, 94, 0.24);
+  }
+  50% {
+    box-shadow: 0 14px 32px -6px rgba(236, 72, 153, 0.54), 0 6px 18px -4px rgba(244, 63, 94, 0.36);
+  }
+}
+
+.btn-xoi-shimmer {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.btn-xoi-shimmer::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: 48%;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.45) 50%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 1;
+  animation: xoi-shimmer-sweep 4.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  will-change: transform, opacity;
+}
+
+.btn-xoi-glow {
+  animation: xoi-cta-glow 3s ease-in-out infinite;
+}
+
+/* Playful gentle wandering around the Menu Board (chill, non-dizzying) */
+@keyframes xoi-wander-a {
+  0%, 100% {
+    transform: translate3d(0px, 0px, 0) rotate(-8deg);
+  }
+  20% {
+    transform: translate3d(26px, -68px, 0) rotate(12deg);
+  }
+  42% {
+    transform: translate3d(-14px, -130px, 0) rotate(-14deg);
+  }
+  65% {
+    transform: translate3d(34px, -40px, 0) rotate(10deg);
+  }
+  84% {
+    transform: translate3d(-18px, 55px, 0) rotate(-12deg);
+  }
+}
+
+@keyframes xoi-wander-b {
+  0%, 100% {
+    transform: translate3d(0px, 0px, 0) rotate(10deg);
+  }
+  22% {
+    transform: translate3d(-28px, 72px, 0) rotate(-13deg);
+  }
+  48% {
+    transform: translate3d(16px, 128px, 0) rotate(14deg);
+  }
+  70% {
+    transform: translate3d(-32px, 32px, 0) rotate(-10deg);
+  }
+  88% {
+    transform: translate3d(14px, -52px, 0) rotate(11deg);
+  }
+}
+
+.animate-xoi-wander-a {
+  animation: xoi-wander-a 18s ease-in-out infinite;
+  will-change: transform;
+}
+
+.animate-xoi-wander-b {
+  animation: xoi-wander-b 22s ease-in-out infinite;
+  will-change: transform;
+}
+
+
+
+

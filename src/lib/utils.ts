@@ -1,0 +1,203 @@
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs));
+}
+
+export function formatVND(amount: number): string {
+  return new Intl.NumberFormat("vi-VN", {
+    style: "currency",
+    currency: "VND",
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
+export function formatTimeAgo(dateString: string): string {
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffInMinutes = Math.floor((now.getTime() - date.getTime()) / (1000 * 60));
+
+  if (diffInMinutes < 1) return "Vừa xong";
+  if (diffInMinutes < 60) return `${diffInMinutes} phút trước`;
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) return `${diffInHours} giờ trước`;
+  return date.toLocaleDateString("vi-VN", { day: "2-digit", month: "2-digit" });
+}
+
+export { generateVietQrUrl } from "./vietqr";
+
+export const POPULAR_BUILDINGS = [
+  "Software Park Đà Nẵng (02 Quang Trung, Hải Châu)",
+  "FPT Complex Đà Nẵng (KĐT FPT City, Ngũ Hành Sơn)",
+  "Indochina Riverside Towers (74 Bạch Đằng, Hải Châu)",
+  "Tòa nhà Viettel Đà Nẵng (Nguyễn Văn Linh, Hải Châu)",
+  "Vĩnh Trung Plaza (255 Hùng Vương, Thanh Khê)",
+  "ACB Tower Đà Nẵng (218 Bạch Đằng, Hải Châu)",
+  "Công viên Phần mềm số 2 (Software Park 2 - Thuận Phước)",
+  "Tòa nhà Phi Long Technology (Nguyễn Văn Linh, Thanh Khê)",
+  "Tòa nhà Bưu điện Đà Nẵng (155 Trần Phú, Hải Châu)",
+  "Khu văn phòng Quận Hải Châu, Đà Nẵng",
+  "Khu văn phòng Quận Thanh Khê, Đà Nẵng",
+  "Khu văn phòng Quận Ngũ Hành Sơn, Đà Nẵng",
+  "Khách ghé quán lấy trực tiếp (để gặp Xòi)",
+];
+
+export const MIN_LY_ORDER = 5;
+export const MIN_LY_MESSAGE = "🐾 Thêm vài món cho đủ 5 ly để Xòi mở cổng thanh toán nhé!";
+
+export const FACEBOOK_FANPAGE_URL = "https://www.facebook.com/caxoi2022?locale=vi_VN";
+export const XANH_SM_ONELINK = "https://xanhsmngon.onelink.me/14WJ/5hxil4ex";
+
+interface LyCountableItem {
+  variant?: { sizeName?: string };
+  variantName?: string;
+  quantity?: number;
+}
+
+/**
+ * Đếm tổng số lượng đồ uống chọn quy cách "Ly" trong giỏ/đơn hàng.
+ */
+export function countLyItems(items: LyCountableItem[]): number {
+  return items.reduce((sum, item) => {
+    const size = (item.variant?.sizeName ?? item.variantName ?? "").trim().toLowerCase();
+    if (size === "ly") {
+      return sum + (item.quantity || 1);
+    }
+    return sum;
+  }, 0);
+}
+
+/**
+ * Kiểm tra điều kiện tối thiểu 5 ly khi đơn hàng có chọn size "Ly".
+ * Trả về thông báo lỗi nếu tổng số Ly từ 1..4, ngược lại trả về null.
+ */
+export function getMinLyValidationError(items: LyCountableItem[]): string | null {
+  const lyCount = countLyItems(items);
+  if (lyCount > 0 && lyCount < MIN_LY_ORDER) {
+    return MIN_LY_MESSAGE;
+  }
+  return null;
+}
+
+/**
+ * Chuẩn hóa số điện thoại thành đường dẫn tel: an toàn.
+ */
+export function getTelHref(hotline?: string | null): string {
+  const digits = (hotline || "").replace(/[^\d+]/g, "");
+  return `tel:${digits || "0905249733"}`;
+}
+
+/**
+ * Trả về đường dẫn ảnh QR tĩnh mặc định hoặc API /api/qr động nếu Admin đổi URL.
+ */
+export function getQrImageSrc(targetUrl: string | undefined | null, kind: "facebook" | "xanhsm"): string {
+  const normalized = (targetUrl || "").trim();
+  if (kind === "facebook") {
+    if (!normalized || normalized === FACEBOOK_FANPAGE_URL) {
+      return "/images/qr-facebook.svg";
+    }
+    return `/api/qr?color=140A06&url=${encodeURIComponent(normalized)}`;
+  }
+
+  if (!normalized || normalized === XANH_SM_ONELINK) {
+    return "/images/qr-xanhsm.svg";
+  }
+  return `/api/qr?color=005C3B&url=${encodeURIComponent(normalized)}`;
+}
+
+/**
+ * Phân tích chuỗi/mảng tag sản phẩm, giữ nguyên mảng rỗng [] khi Admin tắt hết tag.
+ */
+export function parseProductTags(raw: unknown): string[] {
+  if (Array.isArray(raw)) {
+    return raw.map((t) => String(t).trim()).filter(Boolean);
+  }
+  if (typeof raw === "string") {
+    return raw
+      .split(",")
+      .map((t) => t.trim())
+      .filter(Boolean);
+  }
+  return [];
+}
+
+/**
+ * Chỉ cho phép URL http:// hoặc https:// (chống Stored XSS qua javascript: / data:).
+ */
+export function sanitizeExternalUrl(raw: string | undefined | null, fallback: string): string {
+  const val = (raw || "").trim();
+  if (!val) return fallback;
+  try {
+    const parsed = new URL(val);
+    if (parsed.protocol === "https:" || parsed.protocol === "http:") {
+      return parsed.toString();
+    }
+  } catch {
+    // Invalid URL
+  }
+  return fallback;
+}
+
+/**
+ * Kiểm tra đường dẫn ảnh an toàn: đường dẫn tương đối `/images/...` hoặc URL `https://` / `http://`.
+ */
+export function sanitizeImageUrl(raw: string | undefined | null, fallback: string): string {
+  const val = (raw || "").trim();
+  if (!val) return fallback;
+  if (val.startsWith("/") && !val.startsWith("//")) {
+    return val;
+  }
+  return sanitizeExternalUrl(val, fallback);
+}
+
+/**
+ * Escape HTML chống HTML/XSS injection trong email & mẫu in.
+ */
+export function escapeHtml(raw: unknown): string {
+  return String(raw ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/**
+ * Che bớt số điện thoại khách hàng cho phản hồi công khai (VD: 0905***733).
+ */
+export function maskPhone(phone?: string | null): string {
+  const digits = (phone || "").replace(/\s+/g, "");
+  if (digits.length < 7) return "***";
+  return `${digits.slice(0, 4)}***${digits.slice(-3)}`;
+}
+
+/**
+ * Che bớt địa chỉ chi tiết cho phản hồi công khai không kèm trackingToken.
+ */
+export function maskAddress(address?: string | null): string {
+  const val = (address || "").trim();
+  if (!val) return "";
+  if (val.length <= 12) return "***";
+  return `${val.slice(0, 6)}...${val.slice(-6)}`;
+}
+
+/**
+ * Che bớt họ tên khách hàng / tài xế cho phản hồi công khai không có quyền chủ đơn.
+ * VD: "Nguyễn Văn Bình" -> "Ng*** B***"
+ */
+export function maskPersonName(name?: string | null): string {
+  const parts = (name || "").trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "***";
+  if (parts.length === 1) {
+    const w = parts[0];
+    return w.length <= 1 ? "*" : `${w.slice(0, 1)}***`;
+  }
+  const first = parts[0];
+  const last = parts[parts.length - 1];
+  const maskedFirst = first.length <= 2 ? `${first.slice(0, 1)}***` : `${first.slice(0, 2)}***`;
+  const maskedLast = `${last.slice(0, 1)}***`;
+  return `${maskedFirst} ${maskedLast}`;
+}
+
+
