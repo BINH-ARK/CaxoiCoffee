@@ -3,9 +3,9 @@ import {
   listDatabaseBackupSnapshots,
   restoreDatabaseFromBackupSnapshot,
   deleteBackupSnapshot,
-  getSqliteStatus,
-  recordAuditLogInSqlite,
-} from "@/lib/sqlite";
+  getDatabaseStatus,
+  recordAuditLogInMySql,
+} from "@/lib/mysql";
 import { getTrustedClientIp, requireStaffAuth } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
         return NextResponse.json(result, { status: 400 });
       }
 
-      recordAuditLogInSqlite({
+      await recordAuditLogInMySql({
         actorId: auth.staff.id,
         actorUsername: auth.staff.username,
         actorRole: auth.staff.role,
@@ -64,11 +64,11 @@ export async function POST(request: Request) {
         ipAddress: getTrustedClientIp(request),
       });
 
-      const sqliteStatus = getSqliteStatus();
+      const dbStatus = await getDatabaseStatus();
       return NextResponse.json({
         success: true,
         message: result.message,
-        sqlite: sqliteStatus,
+        sqlite: dbStatus,
       });
     }
 
@@ -114,7 +114,7 @@ export async function DELETE(request: Request) {
       return NextResponse.json(result, { status: 400 });
     }
 
-    recordAuditLogInSqlite({
+    await recordAuditLogInMySql({
       actorId: auth.staff.id,
       actorUsername: auth.staff.username,
       actorRole: auth.staff.role,

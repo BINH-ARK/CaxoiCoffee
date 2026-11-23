@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import {
-  getBusinessSettingsFromSqlite,
-  updateBusinessSettingsInSqlite,
-  toggleProductAvailabilityInSqlite,
-  getProductsFromSqlite,
-  recordAuditLogInSqlite,
-} from "@/lib/sqlite";
+  getBusinessSettingsFromMySql,
+  updateBusinessSettingsInMySql,
+  toggleProductAvailabilityInMySql,
+  getProductsFromMySql,
+  recordAuditLogInMySql,
+} from "@/lib/mysql";
 import { getTrustedClientIp, requireStaffAuth } from "@/lib/serverAuth";
 import { BusinessSettings } from "@/types";
 import {
@@ -52,7 +52,7 @@ const STRING_SETTING_KEYS: ReadonlyArray<keyof BusinessSettings> = [
 ];
 
 export async function GET() {
-  const settings = getBusinessSettingsFromSqlite();
+  const settings = await getBusinessSettingsFromMySql();
   return NextResponse.json({
     success: true,
     data: settings,
@@ -69,14 +69,14 @@ export async function PATCH(request: Request) {
       const auth = await requireStaffAuth(request, { permission: "menu.toggle_availability" });
       if (!auth.ok) return auth.response;
 
-      const products = getProductsFromSqlite();
+      const products = await getProductsFromMySql();
       const prod = products.find((p) => p.id === body.toggleProductId);
       if (!prod) {
         return NextResponse.json({ success: false, message: "Không tìm thấy sản phẩm." }, { status: 404 });
       }
       const newAvailability = !prod.isAvailable;
-      toggleProductAvailabilityInSqlite(prod.id, newAvailability);
-      recordAuditLogInSqlite({
+      await toggleProductAvailabilityInMySql(prod.id, newAvailability);
+      await recordAuditLogInMySql({
         actorId: auth.staff.id,
         actorUsername: auth.staff.username,
         actorRole: auth.staff.role,
@@ -88,7 +88,7 @@ export async function PATCH(request: Request) {
       });
       return NextResponse.json({
         success: true,
-        message: `Đã đổi trạng thái món "${prod.name}" thành: ${newAvailability ? "Còn hàng" : "Tạm hết hàng"} (SQLite)`,
+        message: `Đã đổi trạng thái món "${prod.name}" thành: ${newAvailability ? "Còn hàng" : "Tạm hết hàng"} (MySQL)`,
         data: { ...prod, isAvailable: newAvailability },
       });
     }
@@ -163,11 +163,11 @@ export async function PATCH(request: Request) {
       sanitizedUpdates.heroLogoUrl = sanitizeImageUrl(String(body.heroLogoUrl), "/images/ca-xoi-logo.jpg");
     }
 
-    const updated = updateBusinessSettingsInSqlite(sanitizedUpdates);
+    const updated = await updateBusinessSettingsInMySql(sanitizedUpdates);
 
     const updatedKeys = Object.keys(sanitizedUpdates);
     if (updatedKeys.length > 0) {
-      recordAuditLogInSqlite({
+      await recordAuditLogInMySql({
         actorId: auth.staff.id,
         actorUsername: auth.staff.username,
         actorRole: auth.staff.role,
@@ -185,7 +185,7 @@ export async function PATCH(request: Request) {
 
     return NextResponse.json({
       success: true,
-      message: "Cập nhật cấu hình quán vào CSDL SQLite thành công!",
+      message: "Cập nhật cấu hình quán vào CSDL MySQL thành công!",
       data: updated,
     });
   } catch (error) {

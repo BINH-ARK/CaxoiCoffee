@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { calculateShippingDistance } from "@/lib/googleMaps";
-import { getBusinessSettingsFromSqlite } from "@/lib/sqlite";
+import { getBusinessSettingsFromMySql } from "@/lib/mysql";
 import { getTrustedClientIp } from "@/lib/serverAuth";
 import { consumeRateLimit, createRateLimitResponse } from "@/lib/rateLimit";
 
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   try {
     const ip = getTrustedClientIp(request);
-    const rl = consumeRateLimit(`shipping:calc:${ip}`, 20, 60 * 1000);
+    const rl = await consumeRateLimit(`shipping:calc:${ip}`, 20, 60 * 1000);
     if (!rl.allowed) {
       return createRateLimitResponse(rl.retryAfterSeconds);
     }
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const settings = getBusinessSettingsFromSqlite();
+    const settings = await getBusinessSettingsFromMySql();
     const cups = Math.max(1, Math.min(200, Math.floor(Number(totalCups) || 1)));
 
     const result = await calculateShippingDistance(destination, cups, Boolean(isTakeaway), {

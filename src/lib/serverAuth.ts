@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { COOKIE_NAME, Role, verifyAuthToken } from "@/lib/auth";
-import { getAuthUserByIdFromSqlite } from "@/lib/sqlite";
+import { getAuthUserByIdFromMySql } from "@/lib/mysql";
 
 export interface AuthenticatedStaff {
   id: string;
@@ -123,7 +123,7 @@ export function verifySameOriginCsrf(request: Request): NextResponse | null {
 }
 
 /**
- * Trả về thông tin nhân viên đã xác thực (đối chiếu trực tiếp is_active & token_version trong SQLite).
+ * Trả về thông tin nhân viên đã xác thực (đối chiếu trực tiếp is_active & token_version trong MySQL).
  */
 export async function getAuthenticatedStaff(request: Request): Promise<AuthenticatedStaff | null> {
   const token = extractCookieValue(request, COOKIE_NAME);
@@ -132,7 +132,7 @@ export async function getAuthenticatedStaff(request: Request): Promise<Authentic
   const payload = await verifyAuthToken(token);
   if (!payload || !payload.sub) return null;
 
-  const dbUser = getAuthUserByIdFromSqlite(payload.sub);
+  const dbUser = await getAuthUserByIdFromMySql(payload.sub);
   if (!dbUser || !dbUser.isActive) return null;
 
   const tokenTv = typeof payload.tv === "number" ? payload.tv : 1;

@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import {
-  getProductOptionsFromSqlite,
-  createOptionValueInSqlite,
-  updateOptionValueInSqlite,
-  deleteOptionValueInSqlite,
-} from "@/lib/sqlite";
+  getProductOptionsFromMySql,
+  createOptionValueInMySql,
+  updateOptionValueInMySql,
+  deleteOptionValueInMySql,
+} from "@/lib/mysql";
 import { requireStaffAuth } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ export async function GET(request: Request) {
   if (!auth.ok) return auth.response;
 
   try {
-    const options = getProductOptionsFromSqlite();
+    const options = await getProductOptionsFromMySql();
     return NextResponse.json({ success: true, data: options });
   } catch (error: any) {
     return NextResponse.json(
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const success = createOptionValueInSqlite({
+    const success = await createOptionValueInMySql({
       optionId: Number(optionId),
       name: name.trim(),
       extraPrice: Math.round(parsedExtra),
@@ -56,12 +56,12 @@ export async function POST(request: Request) {
 
     if (!success) {
       return NextResponse.json(
-        { success: false, message: "Không thể thêm tùy chọn vào SQLite." },
+        { success: false, message: "Không thể thêm tùy chọn vào MySQL." },
         { status: 500 }
       );
     }
 
-    const updatedOptions = getProductOptionsFromSqlite();
+    const updatedOptions = await getProductOptionsFromMySql();
     return NextResponse.json({
       success: true,
       message: `Đã thêm tùy chọn "${name.trim()}" thành công!`,
@@ -97,7 +97,7 @@ export async function PATCH(request: Request) {
       );
     }
 
-    const success = updateOptionValueInSqlite(Number(id), {
+    const success = await updateOptionValueInMySql(Number(id), {
       name,
       extraPrice: extraPrice !== undefined ? Math.round(Number(extraPrice)) : undefined,
       isDefault,
@@ -106,12 +106,12 @@ export async function PATCH(request: Request) {
 
     if (!success) {
       return NextResponse.json(
-        { success: false, message: "Không thể cập nhật tùy chọn trong SQLite." },
+        { success: false, message: "Không thể cập nhật tùy chọn trong MySQL." },
         { status: 500 }
       );
     }
 
-    const updatedOptions = getProductOptionsFromSqlite();
+    const updatedOptions = await getProductOptionsFromMySql();
     return NextResponse.json({
       success: true,
       message: "Đã cập nhật tùy chọn thành công!",
@@ -146,15 +146,15 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const success = deleteOptionValueInSqlite(id);
+    const success = await deleteOptionValueInMySql(id);
     if (!success) {
       return NextResponse.json(
-        { success: false, message: "Không thể xóa tùy chọn khỏi SQLite." },
+        { success: false, message: "Không thể xóa tùy chọn khỏi MySQL." },
         { status: 500 }
       );
     }
 
-    const updatedOptions = getProductOptionsFromSqlite();
+    const updatedOptions = await getProductOptionsFromMySql();
     return NextResponse.json({
       success: true,
       message: "Đã xóa tùy chọn thành công!",

@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import {
-  getRolesAndPermissionsFromSqlite,
-  toggleRolePermissionInSqlite,
-  updateStaffInSqlite,
-  createStaffInSqlite,
-  deleteStaffInSqlite,
-  recordAuditLogInSqlite,
-} from "@/lib/sqlite";
+  getRolesAndPermissionsFromMySql,
+  toggleRolePermissionInMySql,
+  updateStaffInMySql,
+  createStaffInMySql,
+  deleteStaffInMySql,
+  recordAuditLogInMySql,
+} from "@/lib/mysql";
 import { getTrustedClientIp, requireStaffAuth } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   });
   if (!auth.ok) return auth.response;
 
-  const rbacData = getRolesAndPermissionsFromSqlite();
+  const rbacData = await getRolesAndPermissionsFromMySql();
   return NextResponse.json({
     success: true,
     data: rbacData,
@@ -41,7 +41,7 @@ export async function PATCH(request: Request) {
     if (action === "TOGGLE_ROLE_PERMISSION") {
       const { roleId, permissionCode } = body;
 
-      const result = toggleRolePermissionInSqlite(roleId, permissionCode);
+      const result = await toggleRolePermissionInMySql(roleId, permissionCode);
       if (!result.success) {
         return NextResponse.json(
           { success: false, message: result.message },
@@ -49,7 +49,7 @@ export async function PATCH(request: Request) {
         );
       }
 
-      recordAuditLogInSqlite({
+      await recordAuditLogInMySql({
         actorId: auth.staff.id,
         actorUsername: auth.staff.username,
         actorRole: auth.staff.role,
@@ -60,7 +60,7 @@ export async function PATCH(request: Request) {
         ipAddress: ip,
       });
 
-      const rbacData = getRolesAndPermissionsFromSqlite();
+      const rbacData = await getRolesAndPermissionsFromMySql();
       const updatedRole = rbacData.roles.find((r) => r.roleId === roleId);
 
       return NextResponse.json({
@@ -80,22 +80,22 @@ export async function PATCH(request: Request) {
         );
       }
 
-      const result = updateStaffInSqlite(
+      const result = await updateStaffInMySql(
         staffId,
         { fullName, role, pin, isActive, phone, email, password },
         auth.staff.id
       );
       if (!result.success) {
         return NextResponse.json(
-          { success: false, message: result.message || "Lỗi cập nhật nhân viên trong SQLite" },
+          { success: false, message: result.message || "Lỗi cập nhật nhân viên trong MySQL" },
           { status: 400 }
         );
       }
 
-      const rbacData = getRolesAndPermissionsFromSqlite();
+      const rbacData = await getRolesAndPermissionsFromMySql();
       const updatedStaff = rbacData.staff.find((s) => s.id === staffId);
 
-      recordAuditLogInSqlite({
+      await recordAuditLogInMySql({
         actorId: auth.staff.id,
         actorUsername: auth.staff.username,
         actorRole: auth.staff.role,
@@ -123,12 +123,12 @@ export async function PATCH(request: Request) {
         );
       }
 
-      const result = deleteStaffInSqlite(staffId, auth.staff.id);
+      const result = await deleteStaffInMySql(staffId, auth.staff.id);
       if (!result.success) {
         return NextResponse.json({ success: false, message: result.message }, { status: 400 });
       }
 
-      recordAuditLogInSqlite({
+      await recordAuditLogInMySql({
         actorId: auth.staff.id,
         actorUsername: auth.staff.username,
         actorRole: auth.staff.role,
@@ -167,15 +167,15 @@ export async function PATCH(request: Request) {
         );
       }
 
-      const rbacData = getRolesAndPermissionsFromSqlite();
+      const rbacData = await getRolesAndPermissionsFromMySql();
       if (rbacData.staff.some((s) => s.username.toLowerCase() === cleanUsername.toLowerCase())) {
         return NextResponse.json(
-          { success: false, message: "Tên đăng nhập này đã tồn tại trong CSDL SQLite." },
+          { success: false, message: "Tên đăng nhập này đã tồn tại trong CSDL MySQL." },
           { status: 400 }
         );
       }
 
-      const result = createStaffInSqlite({
+      const result = await createStaffInMySql({
         username: cleanUsername,
         fullName: String(fullName).trim(),
         role,
@@ -187,12 +187,12 @@ export async function PATCH(request: Request) {
 
       if (!result.success) {
         return NextResponse.json(
-          { success: false, message: result.message || "Lỗi tạo tài khoản nhân viên trong SQLite" },
+          { success: false, message: result.message || "Lỗi tạo tài khoản nhân viên trong MySQL" },
           { status: 400 }
         );
       }
 
-      recordAuditLogInSqlite({
+      await recordAuditLogInMySql({
         actorId: auth.staff.id,
         actorUsername: auth.staff.username,
         actorRole: auth.staff.role,
@@ -203,14 +203,14 @@ export async function PATCH(request: Request) {
         ipAddress: ip,
       });
 
-      const updatedRbac = getRolesAndPermissionsFromSqlite();
+      const updatedRbac = await getRolesAndPermissionsFromMySql();
       const newStaff = updatedRbac.staff.find(
         (s) => s.username.toLowerCase() === cleanUsername.toLowerCase()
       );
 
       return NextResponse.json({
         success: true,
-        message: result.message || `Đã tạo tài khoản nhân viên "${fullName}" vào SQLite thành công!`,
+        message: result.message || `Đã tạo tài khoản nhân viên "${fullName}" vào MySQL thành công!`,
         data: newStaff,
       });
     }

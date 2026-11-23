@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import { Product } from "@/types";
 import {
-  getProductsFromSqlite,
-  createProductInSqlite,
-  resetMenuTablesOnlyInSqlite,
-  recordAuditLogInSqlite,
-} from "@/lib/sqlite";
+  getProductsFromMySql,
+  createProductInMySql,
+  resetMenuTablesOnlyInMySql,
+  recordAuditLogInMySql,
+} from "@/lib/mysql";
 import { getTrustedClientIp, requireStaffAuth } from "@/lib/serverAuth";
 import { sanitizeImageUrl } from "@/lib/utils";
 
@@ -23,14 +23,14 @@ export async function POST(request: Request) {
       const adminAuth = await requireStaffAuth(request, { roles: ["SUPER_ADMIN"] });
       if (!adminAuth.ok) return adminAuth.response;
 
-      const ok = resetMenuTablesOnlyInSqlite();
+      const ok = await resetMenuTablesOnlyInMySql();
       if (!ok) {
         return NextResponse.json(
-          { success: false, message: "Không thể khôi phục thực đơn chuẩn từ tệp SQL." },
+          { success: false, message: "Không thể khôi phục thực đơn chuẩn." },
           { status: 500 }
         );
       }
-      recordAuditLogInSqlite({
+      await recordAuditLogInMySql({
         actorId: adminAuth.staff.id,
         actorUsername: adminAuth.staff.username,
         actorRole: adminAuth.staff.role,
@@ -39,7 +39,7 @@ export async function POST(request: Request) {
         summary: "Khôi phục thực đơn 5 món chuẩn Cà Xòi (giữ nguyên đơn hàng & tài khoản)",
         ipAddress: getTrustedClientIp(request),
       });
-      const products = getProductsFromSqlite();
+      const products = await getProductsFromMySql();
       return NextResponse.json({
         success: true,
         message: "Đã khôi phục Thực đơn chuẩn Quán Cà Xòi (giữ nguyên toàn bộ đơn hàng, doanh thu và tài khoản)!",
@@ -89,12 +89,18 @@ export async function POST(request: Request) {
     }
 
     const id = `p-${Date.now()}`;
-    const slug = cleanName
+    const baseSlug = cleanName
       .toLowerCase()
       .normalize("NFD")
       .replace(/[\u0300-\u036f]/g, "")
       .replace(/[^a-z0-9]/g, "-")
-      .replace(/-+/g, "-");
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "") || "mon-moi";
+    const existingProducts = await getProductsFromMySql();
+    const existingSlugs = new Set(existingProducts.map((p) => p.slug.toLowerCase()));
+    const slug = existingSlugs.has(baseSlug)
+      ? `${baseSlug}-${Date.now().toString(36).slice(-4)}`
+      : baseSlug;
 
     const newProduct: Product = {
       id,
@@ -112,15 +118,15 @@ export async function POST(request: Request) {
       variants: Array.isArray(variants) ? variants : [],
     };
 
-    const success = createProductInSqlite(newProduct);
+    const success = await createProductInMySql(newProduct);
     if (!success) {
       return NextResponse.json(
-        { success: false, message: "Lỗi ghi dữ liệu món mới vào CSDL SQLite" },
+        { success: false, message: "Lỗi ghi dữ liệu món mới vào CSDL MySQL" },
         { status: 500 }
       );
     }
 
-    recordAuditLogInSqlite({
+    await recordAuditLogInMySql({
       actorId: auth.staff.id,
       actorUsername: auth.staff.username,
       actorRole: auth.staff.role,
@@ -133,7 +139,7 @@ export async function POST(request: Request) {
 
     return NextResponse.json({
       success: true,
-      message: `Đã thêm món mới "${newProduct.name}" vào CSDL SQLite thành công!`,
+      message: `Đã thêm món mới "${newProduct.name}" vào CSDL MySQL thành công!`,
       data: newProduct,
     });
   } catch (error: any) {

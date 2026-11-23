@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { COOKIE_NAME } from "@/lib/auth";
 import { getAuthenticatedStaff, getTrustedClientIp, verifySameOriginCsrf } from "@/lib/serverAuth";
-import { incrementUserTokenVersionInSqlite, recordAuditLogInSqlite } from "@/lib/sqlite";
+import { incrementUserTokenVersionInMySql, recordAuditLogInMySql } from "@/lib/mysql";
 
 export async function POST(request: Request) {
   const csrfError = verifySameOriginCsrf(request);
@@ -11,8 +11,8 @@ export async function POST(request: Request) {
   try {
     const staff = await getAuthenticatedStaff(request);
     if (staff) {
-      incrementUserTokenVersionInSqlite(staff.id);
-      recordAuditLogInSqlite({
+      await incrementUserTokenVersionInMySql(staff.id);
+      await recordAuditLogInMySql({
         actorId: staff.id,
         actorUsername: staff.username,
         actorRole: staff.role,

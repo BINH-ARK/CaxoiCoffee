@@ -45,7 +45,7 @@ function buildCompactAddress(addr: Record<string, string | undefined>, fallbackD
 
 export async function GET(request: Request) {
   const ip = getTrustedClientIp(request);
-  const rl = consumeRateLimit(`location:search:${ip}`, 30, 60 * 1000);
+  const rl = await consumeRateLimit(`location:search:${ip}`, 30, 60 * 1000);
   if (!rl.allowed) {
     return createRateLimitResponse(
       rl.retryAfterSeconds,

@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import {
-  checkRateLimitLockInSqlite,
-  consumeRateLimitInSqlite,
-  resetRateLimitInSqlite,
-} from "@/lib/sqlite";
+  checkRateLimitLockInMySql,
+  consumeRateLimitInMySql,
+  resetRateLimitInMySql,
+} from "@/lib/mysql";
 
 export interface RateLimitResult {
   allowed: boolean;
@@ -14,27 +14,27 @@ export interface RateLimitResult {
 /**
  * Kiểm tra xem khóa (IP / username / global) có đang bị khóa hay không (không cộng thêm lượt).
  */
-export function checkRateLimitLock(key: string): RateLimitResult {
-  return checkRateLimitLockInSqlite(key);
+export async function checkRateLimitLock(key: string): Promise<RateLimitResult> {
+  return checkRateLimitLockInMySql(key);
 }
 
 /**
- * Ghi nhận 1 lượt gọi và kiểm tra giới hạn tốc độ bền vững trong SQLite.
+ * Ghi nhận 1 lượt gọi và kiểm tra giới hạn tốc độ bền vững trong MySQL.
  */
-export function consumeRateLimit(
+export async function consumeRateLimit(
   key: string,
   maxRequests: number,
   windowMs: number,
   lockDurationMs?: number
-): RateLimitResult {
-  return consumeRateLimitInSqlite(key, maxRequests, windowMs, lockDurationMs);
+): Promise<RateLimitResult> {
+  return consumeRateLimitInMySql(key, maxRequests, windowMs, lockDurationMs);
 }
 
 /**
  * Xóa bộ đếm sau khi xác thực thành công.
  */
-export function resetRateLimit(key: string): void {
-  resetRateLimitInSqlite(key);
+export async function resetRateLimit(key: string): Promise<void> {
+  await resetRateLimitInMySql(key);
 }
 
 /**

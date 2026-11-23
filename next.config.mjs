@@ -18,7 +18,7 @@ const cspDirectives = [
 const nextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
-  serverExternalPackages: ['better-sqlite3', 'mysql2'],
+  serverExternalPackages: ['mysql2'],
   images: {
     dangerouslyAllowSVG: false,
     contentDispositionType: 'attachment',

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getPromotionByCodeFromSqlite, calculatePromotionDiscount } from "@/lib/sqlite";
+import { getPromotionByCodeFromMySql, calculatePromotionDiscount } from "@/lib/mysql";
 import { getTrustedClientIp } from "@/lib/serverAuth";
 import { consumeRateLimit, createRateLimitResponse } from "@/lib/rateLimit";
 
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 export async function POST(request: Request) {
   try {
     const ip = getTrustedClientIp(request);
-    const rl = consumeRateLimit(`promo:validate:${ip}`, 15, 60 * 1000);
+    const rl = await consumeRateLimit(`promo:validate:${ip}`, 15, 60 * 1000);
     if (!rl.allowed) {
       return createRateLimitResponse(
         rl.retryAfterSeconds,
@@ -29,7 +29,7 @@ export async function POST(request: Request) {
     const orderAmount = Math.max(0, Number(subtotalAmount) || 0);
     const shipFee = Math.max(0, Number(deliveryFee) || 0);
 
-    const promotion = getPromotionByCodeFromSqlite(code.trim().slice(0, 40));
+    const promotion = await getPromotionByCodeFromMySql(code.trim().slice(0, 40));
     if (!promotion) {
       return NextResponse.json(
         { valid: false, message: `Mã giảm giá "${code.trim().toUpperCase()}" không hợp lệ hoặc không tồn tại.` },

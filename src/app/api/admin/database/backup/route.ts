@@ -1,18 +1,15 @@
 import { NextResponse } from "next/server";
-import fs from "fs";
-import path from "path";
 import {
   exportFullDatabaseToJson,
-  exportLiveSqlDumpFromSqlite,
+  exportLiveSqlDumpFromMySql,
   createDatabaseBackupSnapshot,
-  checkpointSqliteForDownload,
-} from "@/lib/sqlite";
+} from "@/lib/mysql";
 import { requireStaffAuth } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
 /**
- * GET: Tải tệp sao lưu trực tiếp về máy tính (JSON / SQLite DB / Live SQL Dump)
+ * GET: Tải tệp sao lưu trực tiếp về máy tính (JSON / Live MySQL SQL Dump)
  */
 export async function GET(request: Request) {
   const auth = await requireStaffAuth(request, { roles: ["SUPER_ADMIN"] });
@@ -26,11 +23,9 @@ export async function GET(request: Request) {
     const pad = (n: number) => String(n).padStart(2, "0");
     const dateStr = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}_${pad(now.getHours())}h${pad(now.getMinutes())}`;
 
-    const dbDir = path.join(process.cwd(), "database");
-
     // 1. Tải file JSON có cấu trúc
     if (format === "json") {
-      const fullJson = exportFullDatabaseToJson();
+      const fullJson = await exportFullDatabaseToJson();
       const jsonContent = JSON.stringify(fullJson, null, 2);
       const filename = `caxoi_cafe_backup_${dateStr}.json`;
 
@@ -44,32 +39,9 @@ export async function GET(request: Request) {
       });
     }
 
-    // 2. Tải file SQLite (.db) sau khi WAL checkpoint
-    if (format === "db" || format === "sqlite") {
-      checkpointSqliteForDownload();
-
-      const targetDb = path.join(dbDir, "caxoi_cafe.db");
-      if (!fs.existsSync(targetDb)) {
-        return NextResponse.json({ success: false, message: "File database không tồn tại" }, { status: 404 });
-      }
-
-      const fileBuffer = fs.readFileSync(targetDb);
-      const filename = `caxoi_cafe_backup_${dateStr}.db`;
-
-      return new NextResponse(fileBuffer, {
-        status: 200,
-        headers: {
-          "Content-Type": "application/x-sqlite3",
-          "Content-Disposition": `attachment; filename="${filename}"`,
-          "Content-Length": fileBuffer.length.toString(),
-          "Cache-Control": "no-store",
-        },
-      });
-    }
-
-    // 3. Tải file SQL Dump TỪ DỮ LIỆU THỰC TẾ trong SQLite (không dùng file seed tĩnh)
-    if (format === "sql") {
-      const liveSql = exportLiveSqlDumpFromSqlite();
+    // 2. Tải file SQL Dump TỪ DỮ LIỆU THỰC TẾ trong MySQL
+    if (format === "sql" || format === "mysql") {
+      const liveSql = await exportLiveSqlDumpFromMySql();
       const filename = `caxoi_cafe_backup_${dateStr}.sql`;
 
       return new NextResponse(liveSql, {
@@ -83,7 +55,7 @@ export async function GET(request: Request) {
     }
 
     return NextResponse.json(
-      { success: false, message: "Định dạng không được hỗ trợ. Hãy chọn format=json, format=db hoặc format=sql" },
+      { success: false, message: "Định dạng không được hỗ trợ. Hãy chọn format=json hoặc format=sql" },
       { status: 400 }
     );
   } catch (error: any) {

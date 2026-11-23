@@ -17,7 +17,7 @@ interface NearbyPlace {
 
 export async function GET(request: Request) {
   const ip = getTrustedClientIp(request);
-  const rl = consumeRateLimit(`location:reverse:${ip}`, 15, 60 * 1000);
+  const rl = await consumeRateLimit(`location:reverse:${ip}`, 15, 60 * 1000);
   if (!rl.allowed) {
     return createRateLimitResponse(
       rl.retryAfterSeconds,

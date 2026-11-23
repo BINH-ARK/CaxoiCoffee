@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import {
-  getSqliteStatus,
-  executeSqlSeedFile,
-  resetMenuTablesOnlyInSqlite,
-  checkpointSqliteForDownload,
-  recordAuditLogInSqlite,
-} from "@/lib/sqlite";
-import { checkMySqlConnection, getMySqlPool } from "@/lib/mysql";
+  checkMySqlConnection,
+  getDatabaseStatus,
+  getMySqlPool,
+  resetMenuTablesOnlyInMySql,
+  recordAuditLogInMySql,
+  ensureMySqlInitialized,
+  resetMySqlInitState,
+} from "@/lib/mysql";
 import { getTrustedClientIp, requireStaffAuth } from "@/lib/serverAuth";
 import fs from "fs";
 import path from "path";
@@ -18,7 +19,7 @@ export async function GET(request: Request) {
   if (!auth.ok) return auth.response;
 
   try {
-    const sqliteStatus = getSqliteStatus();
+    const dbStatus = await getDatabaseStatus();
     const mySqlStatus = await checkMySqlConnection();
 
     const dbDir = path.join(process.cwd(), "database");
@@ -26,24 +27,25 @@ export async function GET(request: Request) {
 
     return NextResponse.json({
       success: true,
-      activeEngine: "SQLITE",
+      activeEngine: "MYSQL",
       sqlite: {
-        ...sqliteStatus,
-        relativePath: "database/caxoi_cafe.db",
-        sqlScriptRelativePath: "database/sqlite_caxoi_cafe.sql",
-        dbBrowserUrl: "https://sqlitebrowser.org",
+        ...dbStatus,
+        relativePath: dbStatus.filePath,
+        sqlScriptRelativePath: "database/phpmyadmin_caxoi_cafe.sql",
+        dbBrowserUrl: "https://www.phpmyadmin.net",
         guide: [
-          "1. Mở ứng dụng DB Browser for SQLite trên máy tính của bạn.",
-          "2. Chọn menu File -> Open Database (Mở Cơ Sở Dữ Liệu).",
-          "3. Chọn file 'database/caxoi_cafe.db' (hoặc 'database/caxoi_cafe.sqlite').",
-          "4. Vào tab 'Browse Data' (Duyệt Dữ Liệu) để xem/sửa menu, giá bán, size, đơn hàng, cấu hình quán.",
-          "5. Bấm 'Write Changes' (Ghi Các Thay Đổi) hoặc Ctrl+S. Website sẽ đọc dữ liệu thật từ SQL tức thì!",
+          "1. Hệ thống đang chạy 100% trên MySQL (Hostinger / MariaDB).",
+          "2. Toàn bộ bảng dữ liệu đã được tự động khởi tạo (Auto-migration).",
+          "3. Bạn có thể quản lý trực tiếp qua phpMyAdmin của Hostinger hoặc tải bản sao lưu JSON/SQL ngay tại đây.",
         ],
       },
       mysql: {
         status: {
           connected: Boolean(mySqlStatus?.connected),
-          database: mySqlStatus?.database || "caxoi_cafe",
+          database: mySqlStatus?.database || process.env.MYSQL_DATABASE || "caxoi_cafe",
+          host: mySqlStatus?.host,
+          port: mySqlStatus?.port,
+          message: mySqlStatus?.message,
         },
         dumpFile: "database/phpmyadmin_caxoi_cafe.sql",
         dumpExists: fs.existsSync(phpmyadminSqlPath),
@@ -54,7 +56,7 @@ export async function GET(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        message: error.message || "Lỗi đọc trạng thái cơ sở dữ liệu",
+        message: error.message || "Lỗi đọc trạng thái cơ sở dữ liệu MySQL",
       },
       { status: 500 }
     );
@@ -72,85 +74,52 @@ export async function POST(request: Request) {
 
     // 0. Reset chỉ riêng bảng thực đơn (an toàn, giữ nguyên đơn hàng & người dùng)
     if (action === "RESET_MENU_ONLY") {
-      const ok = resetMenuTablesOnlyInSqlite();
+      const ok = await resetMenuTablesOnlyInMySql();
       if (!ok) {
         return NextResponse.json(
-          { success: false, message: "Không thể khôi phục thực đơn từ file SQL" },
+          { success: false, message: "Không thể khôi phục thực đơn trong MySQL" },
           { status: 500 }
         );
       }
-      recordAuditLogInSqlite({
+      await recordAuditLogInMySql({
         actorId: auth.staff.id,
         actorUsername: auth.staff.username,
         actorRole: auth.staff.role,
         action: "DB_RESET_MENU_ONLY",
         targetType: "DATABASE",
-        summary: "Khôi phục riêng bảng thực đơn chuẩn từ SQL (giữ nguyên đơn hàng & tài khoản)",
+        summary: "Khôi phục riêng bảng thực đơn chuẩn trong MySQL (giữ nguyên đơn hàng & tài khoản)",
         ipAddress: ip,
       });
-      const sqliteStatus = getSqliteStatus();
+      const dbStatus = await getDatabaseStatus();
       return NextResponse.json({
         success: true,
         message: "Đã khôi phục thực đơn chuẩn Quán Cà Xòi (giữ nguyên toàn bộ đơn hàng và tài khoản)!",
-        sqlite: sqliteStatus,
+        sqlite: dbStatus,
       });
     }
 
-    // 1. Nạp lại TOÀN BỘ CSDL SQLite chuẩn từ sqlite_caxoi_cafe.sql (chỉ khi Super Admin xác nhận rõ)
-    if (action === "RESEED_SQLITE" || action === "SYNC_FROM_SQL") {
-      const ok = executeSqlSeedFile();
-      if (!ok) {
-        return NextResponse.json(
-          { success: false, message: "Không thể nạp lại database từ file SQL" },
-          { status: 500 }
-        );
-      }
-      recordAuditLogInSqlite({
-        actorId: auth.staff.id,
-        actorUsername: auth.staff.username,
-        actorRole: auth.staff.role,
-        action: "DB_RESEED_SQLITE",
-        targetType: "DATABASE",
-        summary: "Reset & nạp lại toàn bộ CSDL SQLite từ tệp cấu trúc gốc",
-        ipAddress: ip,
-      });
-      const sqliteStatus = getSqliteStatus();
+    // 1. Khởi tạo lại / kiểm tra cấu trúc bảng MySQL (an toàn, không xóa dữ liệu đang có)
+    if (action === "RESEED_SQLITE" || action === "SYNC_FROM_SQL" || action === "CHECKPOINT_SQLITE") {
+      await ensureMySqlInitialized();
+      const dbStatus = await getDatabaseStatus();
       return NextResponse.json({
         success: true,
-        message: "Đã nạp toàn bộ câu lệnh mới nhất từ file SQL vào CSDL SQLite thành công! Dữ liệu web đã cập nhật.",
-        sqlite: sqliteStatus,
+        message: "Đã kiểm tra & đồng bộ cấu trúc bảng MySQL thành công!",
+        sqlite: dbStatus,
       });
     }
 
-    // 2. Checkpoint WAL into main file
-    if (action === "CHECKPOINT_SQLITE") {
-      try {
-        checkpointSqliteForDownload();
-        const sqliteStatus = getSqliteStatus();
-        return NextResponse.json({
-          success: true,
-          message: "Đã checkpoint WAL và đồng bộ file caxoi_cafe.db & caxoi_cafe.sqlite!",
-          sqlite: sqliteStatus,
-        });
-      } catch (err: any) {
-        return NextResponse.json(
-          { success: false, message: "Lỗi checkpoint: " + err.message },
-          { status: 500 }
-        );
-      }
-    }
-
-    // 3. MySQL Actions
+    // 2. Test kết nối MySQL
     if (action === "TEST_CONNECTION") {
       const status = await checkMySqlConnection();
       return NextResponse.json({
         success: true,
         message: status.connected
-          ? "Kết nối MySQL / phpMyAdmin thành công!"
-          : "Chưa kết nối được MySQL. (Bạn có thể dùng DB Browser for SQLite trực tiếp không cần XAMPP)",
+          ? "Kết nối MySQL thành công!"
+          : status.message || "Chưa kết nối được MySQL.",
         status: {
           connected: Boolean(status.connected),
-          database: status.database || "caxoi_cafe",
+          database: status.database || process.env.MYSQL_DATABASE || "caxoi_cafe",
         },
       });
     }
@@ -169,7 +138,7 @@ export async function POST(request: Request) {
       const statements = sqlContent
         .split(/;\r?\n/)
         .map((s) => s.trim())
-        .filter((s) => s.length > 0 && !s.startsWith("--"));
+        .filter((s) => s.length > 0 && !s.startsWith("--") && !/^CREATE DATABASE|^USE /i.test(s));
 
       let executed = 0;
       const conn = await pool.getConnection();
@@ -184,13 +153,17 @@ export async function POST(request: Request) {
         conn.release();
       }
 
+      // Chạy lại auto-migration sau khi nạp dump phpMyAdmin để nâng cấp cột/bảng khớp ứng dụng
+      resetMySqlInitState();
+      await ensureMySqlInitialized();
+
       const status = await checkMySqlConnection();
       return NextResponse.json({
         success: true,
         message: `Đã nạp thành công ${executed} câu lệnh SQL vào MySQL!`,
         status: {
           connected: Boolean(status.connected),
-          database: status.database || "caxoi_cafe",
+          database: status.database || process.env.MYSQL_DATABASE || "caxoi_cafe",
         },
       });
     }
@@ -200,7 +173,7 @@ export async function POST(request: Request) {
     return NextResponse.json(
       {
         success: false,
-        message: error.message || "Lỗi xử lý yêu cầu CSDL",
+        message: error.message || "Lỗi xử lý yêu cầu CSDL MySQL",
       },
       { status: 500 }
     );

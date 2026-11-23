@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { requireStaffAuth } from "@/lib/serverAuth";
-import { getAuditLogsFromSqlite } from "@/lib/sqlite";
+import { getAuditLogsFromMySql } from "@/lib/mysql";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +16,7 @@ export async function GET(request: Request) {
     const limitParam = Number(searchParams.get("limit") || 100);
     const limit = Math.max(1, Math.min(300, Number.isFinite(limitParam) ? Math.floor(limitParam) : 100));
 
-    const logs = getAuditLogsFromSqlite({ action, limit });
+    const logs = await getAuditLogsFromMySql({ action, limit });
     return NextResponse.json({
       success: true,
       data: logs,

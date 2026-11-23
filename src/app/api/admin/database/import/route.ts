@@ -1,11 +1,15 @@
 import { NextResponse } from "next/server";
-import { restoreDatabaseFromUploadedBuffer, getSqliteStatus, recordAuditLogInSqlite } from "@/lib/sqlite";
+import {
+  restoreDatabaseFromUploadedBuffer,
+  getDatabaseStatus,
+  recordAuditLogInMySql,
+} from "@/lib/mysql";
 import { getTrustedClientIp, requireStaffAuth } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
 
 /**
- * POST: Tiếp nhận tệp sao lưu JSON tải lên (.json) đã xác thực cấu trúc và tiến hành khôi phục CSDL
+ * POST: Tiếp nhận tệp sao lưu JSON tải lên (.json) đã xác thực cấu trúc và tiến hành khôi phục CSDL MySQL
  */
 export async function POST(request: Request) {
   const auth = await requireStaffAuth(request, { roles: ["SUPER_ADMIN"] });
@@ -45,7 +49,6 @@ export async function POST(request: Request) {
       );
     }
 
-    // Giới hạn file tối đa 20MB cho bản sao lưu JSON
     if (buffer.length > 20 * 1024 * 1024) {
       return NextResponse.json(
         { success: false, message: "Kích thước tệp vượt quá giới hạn 20MB cho phép." },
@@ -59,7 +62,7 @@ export async function POST(request: Request) {
       return NextResponse.json(result, { status: 400 });
     }
 
-    recordAuditLogInSqlite({
+    await recordAuditLogInMySql({
       actorId: auth.staff.id,
       actorUsername: auth.staff.username,
       actorRole: auth.staff.role,
@@ -70,13 +73,13 @@ export async function POST(request: Request) {
       ipAddress: getTrustedClientIp(request),
     });
 
-    const sqliteStatus = getSqliteStatus();
+    const dbStatus = await getDatabaseStatus();
 
     return NextResponse.json({
       success: true,
       message: result.message,
       stats: result.stats,
-      sqlite: sqliteStatus,
+      sqlite: dbStatus,
     });
   } catch (error: any) {
     console.error("Lỗi xử lý import database:", error);

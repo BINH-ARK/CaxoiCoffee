@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import {
-  createStaffInSqlite,
-  getStaffByUsernameFromSqlite,
-  recordAuditLogInSqlite,
-} from "@/lib/sqlite";
+  createStaffInMySql,
+  getStaffByUsernameFromMySql,
+  recordAuditLogInMySql,
+} from "@/lib/mysql";
 import { safeEqualStrings } from "@/lib/password";
 import { getTrustedClientIp, verifySameOriginCsrf } from "@/lib/serverAuth";
 import { consumeRateLimit, createRateLimitResponse } from "@/lib/rateLimit";
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
 
   try {
     const ip = getTrustedClientIp(request);
-    const rl = consumeRateLimit(`auth:register:${ip}`, 8, 15 * 60 * 1000, 5 * 60 * 1000);
+    const rl = await consumeRateLimit(`auth:register:${ip}`, 8, 15 * 60 * 1000, 5 * 60 * 1000);
     if (!rl.allowed) {
       return createRateLimitResponse(
         rl.retryAfterSeconds,
@@ -86,7 +86,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const existing = getStaffByUsernameFromSqlite(username);
+    const existing = await getStaffByUsernameFromMySql(username);
     if (existing) {
       return NextResponse.json(
         { success: false, message: `Tên đăng nhập "${username}" đã tồn tại. Vui lòng chọn tên khác.` },
@@ -95,7 +95,7 @@ export async function POST(request: Request) {
     }
 
     const role = ALLOWED_REGISTER_ROLES.has(requestedRole) ? requestedRole : "SUPER_ADMIN";
-    const result = createStaffInSqlite({
+    const result = await createStaffInMySql({
       username,
       fullName,
       role,
@@ -111,7 +111,7 @@ export async function POST(request: Request) {
       );
     }
 
-    recordAuditLogInSqlite({
+    await recordAuditLogInMySql({
       actorUsername: username,
       actorRole: role,
       action: "AUTH_REGISTER_SUCCESS",

@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import {
-  getOrderByIdFromSqlite,
-  updateOrderStatusInSqlite,
-  getBusinessSettingsFromSqlite,
-  recordAuditLogInSqlite,
-} from "@/lib/sqlite";
+  getOrderByIdFromMySql,
+  updateOrderStatusInMySql,
+  getBusinessSettingsFromMySql,
+  recordAuditLogInMySql,
+} from "@/lib/mysql";
 import {
   getAuthenticatedStaff,
   getTrustedClientIp,
@@ -52,7 +52,7 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const order = getOrderByIdFromSqlite(id);
+  const order = await getOrderByIdFromMySql(id);
 
   if (!order) {
     return NextResponse.json(
@@ -69,7 +69,7 @@ export async function GET(
 
   if (!hasFullAccess) {
     const ip = getTrustedClientIp(request);
-    const viewRl = consumeRateLimit(`orders:view:${ip}`, 25, 60 * 1000);
+    const viewRl = await consumeRateLimit(`orders:view:${ip}`, 25, 60 * 1000);
     if (!viewRl.allowed) {
       return createRateLimitResponse(
         viewRl.retryAfterSeconds,
@@ -78,7 +78,7 @@ export async function GET(
     }
   }
 
-  const settings = getBusinessSettingsFromSqlite();
+  const settings = await getBusinessSettingsFromMySql();
 
   const responseOrder: Order = hasFullAccess
     ? { ...order, trackingToken: undefined }
@@ -119,7 +119,7 @@ export async function PATCH(
   const { id } = await params;
   const body = await request.json();
 
-  const currentOrder = getOrderByIdFromSqlite(id);
+  const currentOrder = await getOrderByIdFromMySql(id);
   if (!currentOrder) {
     return NextResponse.json(
       { success: false, message: "Không tìm thấy đơn hàng" },
@@ -172,7 +172,7 @@ export async function PATCH(
       ? "CONFIRMED"
       : targetStatus;
 
-  const ok = updateOrderStatusInSqlite(currentOrder.id, effectiveStatus, {
+  const ok = await updateOrderStatusInMySql(currentOrder.id, effectiveStatus, {
     baristaNotes: body.baristaNotes !== undefined ? String(body.baristaNotes).slice(0, 300) : undefined,
     paymentStatus: body.paymentStatus !== undefined ? String(body.paymentStatus) : undefined,
     shipperName: body.shipperName !== undefined ? String(body.shipperName).trim().slice(0, 100) : undefined,
@@ -191,7 +191,7 @@ export async function PATCH(
     );
   }
 
-  const updatedOrder = getOrderByIdFromSqlite(currentOrder.id);
+  const updatedOrder = await getOrderByIdFromMySql(currentOrder.id);
 
   // Ghi Nhật Ký Kiểm Toán cho thay đổi tài chính (thanh toán / phí ship) hoặc hủy đơn
   if (isFinancialChange || effectiveStatus === "CANCELLED") {
@@ -210,7 +210,7 @@ export async function PATCH(
     }
 
     if (changes.length > 0) {
-      recordAuditLogInSqlite({
+      await recordAuditLogInMySql({
         actorId: auth.staff.id,
         actorUsername: auth.staff.username,
         actorRole: auth.staff.role,
@@ -252,7 +252,7 @@ export async function DELETE(
   const reason = (searchParams.get("reason") || "Hủy đơn hàng").trim().slice(0, 200);
   const ip = getTrustedClientIp(request);
 
-  const currentOrder = getOrderByIdFromSqlite(id);
+  const currentOrder = await getOrderByIdFromMySql(id);
   if (!currentOrder) {
     return NextResponse.json(
       { success: false, message: "Không tìm thấy đơn hàng" },
@@ -280,7 +280,7 @@ export async function DELETE(
   );
 
   if (!isAuthorizedStaff) {
-    const cancelRl = consumeRateLimit(`orders:cancel:${ip}`, 10, 60 * 1000);
+    const cancelRl = await consumeRateLimit(`orders:cancel:${ip}`, 10, 60 * 1000);
     if (!cancelRl.allowed) {
       return createRateLimitResponse(cancelRl.retryAfterSeconds);
     }
@@ -306,11 +306,11 @@ export async function DELETE(
     }
   }
 
-  updateOrderStatusInSqlite(currentOrder.id, "CANCELLED", {
+  await updateOrderStatusInMySql(currentOrder.id, "CANCELLED", {
     trackingNotes: reason,
   });
 
-  recordAuditLogInSqlite({
+  await recordAuditLogInMySql({
     actorId: isAuthorizedStaff && staff ? staff.id : null,
     actorUsername: isAuthorizedStaff && staff ? staff.username : "customer",
     actorRole: isAuthorizedStaff && staff ? staff.role : "CUSTOMER",
@@ -322,7 +322,7 @@ export async function DELETE(
     ipAddress: ip,
   });
 
-  const updatedOrder = getOrderByIdFromSqlite(currentOrder.id);
+  const updatedOrder = await getOrderByIdFromMySql(currentOrder.id);
 
   return NextResponse.json({
     success: true,

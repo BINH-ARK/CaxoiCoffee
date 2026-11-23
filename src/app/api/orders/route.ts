@@ -2,14 +2,14 @@ import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { Order, OrderItemRecord } from "@/types";
 import {
-  getOrdersFromSqlite,
-  saveOrderToSqlite,
-  getBusinessSettingsFromSqlite,
-  getPromotionByCodeFromSqlite,
+  getOrdersFromMySql,
+  saveOrderToMySql,
+  getBusinessSettingsFromMySql,
+  getPromotionByCodeFromMySql,
   calculatePromotionDiscount,
-  getProductsFromSqlite,
-  getProductOptionsFromSqlite,
-} from "@/lib/sqlite";
+  getProductsFromMySql,
+  getProductOptionsFromMySql,
+} from "@/lib/mysql";
 import { calculateShippingDistance } from "@/lib/googleMaps";
 import { sendOrderNotificationEmail } from "@/lib/mail";
 import { getMinLyValidationError, maskAddress, maskPersonName, maskPhone } from "@/lib/utils";
@@ -55,7 +55,7 @@ export async function GET(request: Request) {
   // 1. Nhân viên có quyền orders.view -> trả toàn bộ dữ liệu theo bộ lọc
   const staff = await getAuthenticatedStaff(request);
   if (staff && (staff.role === "SUPER_ADMIN" || staff.permissions.includes("orders.view"))) {
-    const orders = getOrdersFromSqlite({
+    const orders = await getOrdersFromMySql({
       status,
       orderType,
       phone,
@@ -71,7 +71,7 @@ export async function GET(request: Request) {
 
   // 2. Khách hàng chưa đăng nhập -> giới hạn tốc độ tra cứu công khai (20 lượt/phút/IP)
   const ip = getTrustedClientIp(request);
-  const lookupRl = consumeRateLimit(`orders:lookup:${ip}`, 20, 60 * 1000);
+  const lookupRl = await consumeRateLimit(`orders:lookup:${ip}`, 20, 60 * 1000);
   if (!lookupRl.allowed) {
     return createRateLimitResponse(
       lookupRl.retryAfterSeconds,
@@ -95,7 +95,7 @@ export async function GET(request: Request) {
     );
   }
 
-  const orders = getOrdersFromSqlite({
+  const orders = await getOrdersFromMySql({
     exactPhone: isExactPhone ? digitsOnly : undefined,
     exactOrderCode: isExactOrderCode ? rawQuery : undefined,
     limit: 10,
@@ -114,7 +114,7 @@ export async function POST(request: Request) {
   try {
     // Chống spam tạo đơn hàng giả & bảo vệ hạn mức gửi Gmail SMTP (6 đơn/phút/IP)
     const ip = getTrustedClientIp(request);
-    const createRl = consumeRateLimit(`orders:create:${ip}`, 6, 60 * 1000);
+    const createRl = await consumeRateLimit(`orders:create:${ip}`, 6, 60 * 1000);
     if (!createRl.allowed) {
       return createRateLimitResponse(
         createRl.retryAfterSeconds,
@@ -174,8 +174,8 @@ export async function POST(request: Request) {
     const paymentMethod = ALLOWED_PAYMENT_METHODS.has(rawPaymentMethod) ? rawPaymentMethod : "VIETQR_BANKING";
     const scheduledType = rawScheduledType === "PREORDER" ? "PREORDER" : "ASAP";
 
-    // Kiểm tra trạng thái mở cửa từ SQLite (chặn cả CLOSED và PAUSED)
-    const settings = getBusinessSettingsFromSqlite();
+    // Kiểm tra trạng thái mở cửa từ MySQL (chặn cả CLOSED và PAUSED)
+    const settings = await getBusinessSettingsFromMySql();
     if (settings.storeStatus === "CLOSED") {
       return NextResponse.json(
         { success: false, message: "Quán hiện đang đóng cửa. Xin quý khách vui lòng quay lại sau." },
@@ -194,9 +194,11 @@ export async function POST(request: Request) {
       );
     }
 
-    // 1. Đối chiếu & tính lại toàn bộ giá món, size, topping từ SQLite (không tin unitPrice client)
-    const catalogProducts = getProductsFromSqlite();
-    const catalogOptions = getProductOptionsFromSqlite();
+    // 1. Đối chiếu & tính lại toàn bộ giá món, size, topping từ MySQL (không tin unitPrice client)
+    const [catalogProducts, catalogOptions] = await Promise.all([
+      getProductsFromMySql(),
+      getProductOptionsFromMySql(),
+    ]);
 
     const orderId = `ord-${crypto.randomUUID()}`;
     let subtotalAmount = 0;
@@ -254,7 +256,7 @@ export async function POST(request: Request) {
     let discountAmount = 0;
     let appliedPromotionCode: string | undefined = undefined;
     if (promotionCode && typeof promotionCode === "string" && promotionCode.trim()) {
-      const promotion = getPromotionByCodeFromSqlite(promotionCode.trim());
+      const promotion = await getPromotionByCodeFromMySql(promotionCode.trim());
       if (promotion) {
         const calc = calculatePromotionDiscount(promotion, subtotalAmount, deliveryFee);
         if (calc.valid && calc.discountAmount > 0) {
@@ -304,8 +306,8 @@ export async function POST(request: Request) {
       items: orderItems,
     };
 
-    const sqliteSuccess = saveOrderToSqlite(newOrder);
-    if (!sqliteSuccess) {
+    const dbSuccess = await saveOrderToMySql(newOrder);
+    if (!dbSuccess) {
       return NextResponse.json(
         { success: false, message: "Không thể lưu đơn hàng vào cơ sở dữ liệu. Vui lòng thử lại." },
         { status: 500 }

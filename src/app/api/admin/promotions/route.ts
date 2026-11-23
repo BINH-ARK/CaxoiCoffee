@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import {
-  getPromotionsFromSqlite,
-  createPromotionInSqlite,
-  updatePromotionInSqlite,
-  togglePromotionInSqlite,
-  deletePromotionInSqlite,
-} from "@/lib/sqlite";
+  getPromotionsFromMySql,
+  createPromotionInMySql,
+  updatePromotionInMySql,
+  togglePromotionInMySql,
+  deletePromotionInMySql,
+} from "@/lib/mysql";
 import { requireStaffAuth } from "@/lib/serverAuth";
 
 export const dynamic = "force-dynamic";
@@ -18,7 +18,7 @@ export async function GET(request: Request) {
   if (!auth.ok) return auth.response;
 
   try {
-    const promotions = getPromotionsFromSqlite();
+    const promotions = await getPromotionsFromMySql();
     return NextResponse.json({
       success: true,
       data: promotions,
@@ -53,7 +53,7 @@ export async function POST(request: Request) {
       endTime,
     } = body;
 
-    const result = createPromotionInSqlite({
+    const result = await createPromotionInMySql({
       code,
       name,
       discountType,
@@ -105,7 +105,7 @@ export async function PATCH(request: Request) {
     }
 
     if (action === "TOGGLE") {
-      const result = togglePromotionInSqlite(Number(id));
+      const result = await togglePromotionInMySql(Number(id));
       if (!result.success) {
         return NextResponse.json(
           { success: false, message: result.message },
@@ -133,7 +133,7 @@ export async function PATCH(request: Request) {
         startTime,
         endTime,
       } = payload;
-      const result = updatePromotionInSqlite(Number(id), {
+      const result = await updatePromotionInMySql(Number(id), {
         code,
         name,
         discountType,
@@ -204,7 +204,7 @@ export async function DELETE(request: Request) {
       );
     }
 
-    const result = deletePromotionInSqlite(id);
+    const result = await deletePromotionInMySql(id);
     if (!result.success) {
       return NextResponse.json(
         { success: false, message: result.message },

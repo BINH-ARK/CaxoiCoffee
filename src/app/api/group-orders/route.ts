@@ -2,14 +2,14 @@ import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { GroupSession, CartItem } from "@/types";
 import {
-  getGroupSessionFromSqlite,
-  createGroupSessionInSqlite,
-  addGroupItemToSqlite,
-  lockGroupSessionInSqlite,
-  removeGroupItemFromSqlite,
-  getProductsFromSqlite,
-  getProductOptionsFromSqlite,
-} from "@/lib/sqlite";
+  getGroupSessionFromMySql,
+  createGroupSessionInMySql,
+  addGroupItemToMySql,
+  lockGroupSessionInMySql,
+  removeGroupItemFromMySql,
+  getProductsFromMySql,
+  getProductOptionsFromMySql,
+} from "@/lib/mysql";
 import { resolveCartItemFromCatalog } from "@/lib/pricing";
 import { maskPhone } from "@/lib/utils";
 import { safeEqualStrings } from "@/lib/password";
@@ -44,7 +44,7 @@ export async function GET(request: Request) {
     );
   }
 
-  const session = getGroupSessionFromSqlite(code);
+  const session = await getGroupSessionFromMySql(code);
   if (!session) {
     return NextResponse.json(
       { success: false, message: "Phòng đặt nhóm không tồn tại hoặc đã hết hạn" },
@@ -72,7 +72,7 @@ export async function POST(request: Request) {
 
     // Action 1: Tạo phòng đặt nhóm mới với mã ngẫu nhiên bảo mật 8 ký tự + hostToken bí mật
     if (action === "CREATE") {
-      const rl = consumeRateLimit(`group:create:${ip}`, 5, 10 * 60 * 1000);
+      const rl = await consumeRateLimit(`group:create:${ip}`, 5, 10 * 60 * 1000);
       if (!rl.allowed) {
         return createRateLimitResponse(
           rl.retryAfterSeconds,
@@ -104,7 +104,7 @@ export async function POST(request: Request) {
         items: [],
       };
 
-      const saved = createGroupSessionInSqlite(newSession);
+      const saved = await createGroupSessionInMySql(newSession);
       if (!saved) {
         return NextResponse.json(
           { success: false, message: "Không thể tạo phòng đặt nhóm lúc này. Vui lòng thử lại." },
@@ -120,15 +120,15 @@ export async function POST(request: Request) {
       });
     }
 
-    // Action 2: Thêm món vào phòng (tính giá server-side từ SQLite, chặn phòng hết hạn/khóa)
+    // Action 2: Thêm món vào phòng (tính giá server-side từ MySQL, chặn phòng hết hạn/khóa)
     if (action === "ADD_ITEM") {
-      const rl = consumeRateLimit(`group:add:${ip}`, 30, 60 * 1000);
+      const rl = await consumeRateLimit(`group:add:${ip}`, 30, 60 * 1000);
       if (!rl.allowed) {
         return createRateLimitResponse(rl.retryAfterSeconds);
       }
 
       const code = String(sessionCode || "").trim().toUpperCase();
-      const session = getGroupSessionFromSqlite(code);
+      const session = await getGroupSessionFromMySql(code);
       if (!session) {
         return NextResponse.json({ success: false, message: "Phòng không tồn tại" }, { status: 404 });
       }
@@ -151,8 +151,10 @@ export async function POST(request: Request) {
         return NextResponse.json({ success: false, message: "Thiếu thông tin sản phẩm" }, { status: 400 });
       }
 
-      const catalogProducts = getProductsFromSqlite();
-      const catalogOptions = getProductOptionsFromSqlite();
+      const [catalogProducts, catalogOptions] = await Promise.all([
+        getProductsFromMySql(),
+        getProductOptionsFromMySql(),
+      ]);
       const resolved = resolveCartItemFromCatalog(item, catalogProducts, catalogOptions);
       if (!resolved.ok) {
         return NextResponse.json({ success: false, message: resolved.message }, { status: 400 });
@@ -171,12 +173,12 @@ export async function POST(request: Request) {
         totalPrice: r.totalPrice,
       };
 
-      const added = addGroupItemToSqlite(code, authoritativeCartItem);
+      const added = await addGroupItemToMySql(code, authoritativeCartItem);
       if (!added) {
         return NextResponse.json({ success: false, message: "Không thể thêm món vào phòng nhóm." }, { status: 500 });
       }
 
-      const updatedSession = getGroupSessionFromSqlite(code);
+      const updatedSession = await getGroupSessionFromMySql(code);
       const isHost = Boolean(hostToken && session.hostToken && safeEqualStrings(session.hostToken, String(hostToken)));
       return NextResponse.json({
         success: true,
@@ -188,7 +190,7 @@ export async function POST(request: Request) {
     // Action 3: Chốt & khóa phòng (yêu cầu hostToken của trưởng nhóm)
     if (action === "LOCK") {
       const code = String(sessionCode || "").trim().toUpperCase();
-      const session = getGroupSessionFromSqlite(code);
+      const session = await getGroupSessionFromMySql(code);
       if (!session) {
         return NextResponse.json({ success: false, message: "Phòng không tồn tại" }, { status: 404 });
       }
@@ -205,8 +207,8 @@ export async function POST(request: Request) {
         );
       }
 
-      lockGroupSessionInSqlite(code);
-      const updatedSession = getGroupSessionFromSqlite(code);
+      await lockGroupSessionInMySql(code);
+      const updatedSession = await getGroupSessionFromMySql(code);
 
       return NextResponse.json({
         success: true,
@@ -219,7 +221,7 @@ export async function POST(request: Request) {
     if (action === "REMOVE_ITEM") {
       const code = String(sessionCode || "").trim().toUpperCase();
       const { cartItemId } = body;
-      const session = getGroupSessionFromSqlite(code);
+      const session = await getGroupSessionFromMySql(code);
       if (!session) {
         return NextResponse.json({ success: false, message: "Phòng không tồn tại" }, { status: 404 });
       }
@@ -236,8 +238,8 @@ export async function POST(request: Request) {
         );
       }
 
-      removeGroupItemFromSqlite(code, String(cartItemId || ""));
-      const updatedSession = getGroupSessionFromSqlite(code);
+      await removeGroupItemFromMySql(code, String(cartItemId || ""));
+      const updatedSession = await getGroupSessionFromMySql(code);
       return NextResponse.json({
         success: true,
         data: updatedSession ? sanitizeGroupSession(updatedSession, true) : null,

@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
 import {
-  getProductsFromSqlite,
-  updateProductInSqlite,
-  deleteProductFromSqlite,
-  recordAuditLogInSqlite,
-} from "@/lib/sqlite";
+  getProductsFromMySql,
+  updateProductInMySql,
+  deleteProductFromMySql,
+  recordAuditLogInMySql,
+} from "@/lib/mysql";
 import { parseProductTags, sanitizeImageUrl } from "@/lib/utils";
 import { getTrustedClientIp, requireStaffAuth } from "@/lib/serverAuth";
 
@@ -30,12 +30,12 @@ export async function PATCH(
       : await requireStaffAuth(request, { permission: "menu.edit_pricing" });
     if (!auth.ok) return auth.response;
 
-    const products = getProductsFromSqlite();
+    const products = await getProductsFromMySql();
     const currentProduct = products.find((p) => p.id === id);
 
     if (!currentProduct) {
       return NextResponse.json(
-        { success: false, message: "Không tìm thấy món trong thực đơn SQLite." },
+        { success: false, message: "Không tìm thấy món trong thực đơn." },
         { status: 404 }
       );
     }
@@ -92,18 +92,18 @@ export async function PATCH(
       variants: Array.isArray(body.variants) ? body.variants : currentProduct.variants,
     };
 
-    const success = updateProductInSqlite(updatedProduct);
+    const success = await updateProductInMySql(updatedProduct);
     if (!success) {
       return NextResponse.json(
-        { success: false, message: "Lỗi cập nhật CSDL SQLite" },
+        { success: false, message: "Lỗi cập nhật CSDL MySQL" },
         { status: 500 }
       );
     }
 
-    // Đọc lại từ SQLite để trả về đúng ID variant vừa lưu
-    const refreshed = getProductsFromSqlite().find((p) => p.id === id) || updatedProduct;
+    // Đọc lại từ MySQL để trả về đúng ID variant vừa lưu
+    const refreshed = (await getProductsFromMySql()).find((p) => p.id === id) || updatedProduct;
 
-    recordAuditLogInSqlite({
+    await recordAuditLogInMySql({
       actorId: auth.staff.id,
       actorUsername: auth.staff.username,
       actorRole: auth.staff.role,
@@ -118,7 +118,7 @@ export async function PATCH(
 
     return NextResponse.json({
       success: true,
-      message: `Đã cập nhật món "${refreshed.name}" vào SQLite thành công!`,
+      message: `Đã cập nhật món "${refreshed.name}" vào MySQL thành công!`,
       data: refreshed,
     });
   } catch (error: any) {
@@ -138,16 +138,16 @@ export async function DELETE(
 
   try {
     const { id } = await params;
-    const existing = getProductsFromSqlite().find((p) => p.id === id);
-    const success = deleteProductFromSqlite(id);
+    const existing = (await getProductsFromMySql()).find((p) => p.id === id);
+    const success = await deleteProductFromMySql(id);
     if (!success) {
       return NextResponse.json(
-        { success: false, message: "Không tìm thấy món hoặc lỗi xóa trong CSDL SQLite" },
+        { success: false, message: "Không tìm thấy món hoặc lỗi xóa trong CSDL MySQL" },
         { status: 404 }
       );
     }
 
-    recordAuditLogInSqlite({
+    await recordAuditLogInMySql({
       actorId: auth.staff.id,
       actorUsername: auth.staff.username,
       actorRole: auth.staff.role,
@@ -160,7 +160,7 @@ export async function DELETE(
 
     return NextResponse.json({
       success: true,
-      message: "Đã xóa món khỏi thực đơn SQLite thành công.",
+      message: "Đã xóa món khỏi thực đơn MySQL thành công.",
     });
   } catch (error: any) {
     return NextResponse.json({ success: false, message: error.message }, { status: 500 });

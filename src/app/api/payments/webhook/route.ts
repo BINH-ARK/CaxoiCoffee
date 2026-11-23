@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import {
-  getBusinessSettingsFromSqlite,
-  getOrderByIdFromSqlite,
-  hasWebhookTransactionInSqlite,
-  recordWebhookTransactionInSqlite,
-  updatePaymentStatusInSqlite,
-  recordAuditLogInSqlite,
-} from "@/lib/sqlite";
+  getBusinessSettingsFromMySql,
+  getOrderByIdFromMySql,
+  hasWebhookTransactionInMySql,
+  recordWebhookTransactionInMySql,
+  updatePaymentStatusInMySql,
+  recordAuditLogInMySql,
+} from "@/lib/mysql";
 import { sendOrderNotificationEmail } from "@/lib/mail";
 import { safeEqualStrings } from "@/lib/password";
 import { getTrustedClientIp } from "@/lib/serverAuth";
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
   try {
     const ip = getTrustedClientIp(request);
     const webhookFailKey = `webhook:fail:${ip}`;
-    const lockCheck = checkRateLimitLock(webhookFailKey);
+    const lockCheck = await checkRateLimitLock(webhookFailKey);
     if (!lockCheck.allowed) {
       return createRateLimitResponse(
         lockCheck.retryAfterSeconds,
@@ -50,14 +50,14 @@ export async function POST(request: Request) {
 
     const incomingSecret = extractWebhookSecret(request);
     if (!incomingSecret || !safeEqualStrings(incomingSecret, configuredSecret)) {
-      consumeRateLimit(webhookFailKey, 10, 5 * 60 * 1000, 5 * 60 * 1000);
+      await consumeRateLimit(webhookFailKey, 10, 5 * 60 * 1000, 5 * 60 * 1000);
       return NextResponse.json(
         { success: false, message: "Unauthorized. Chữ ký / khóa bảo mật Webhook không hợp lệ." },
         { status: 401 }
       );
     }
 
-    resetRateLimit(webhookFailKey);
+    await resetRateLimit(webhookFailKey);
 
     const payload = await request.json();
 
@@ -93,7 +93,7 @@ export async function POST(request: Request) {
     }
 
     // Kiểm tra số tài khoản thụ hưởng nếu gateway có truyền lên
-    const settings = getBusinessSettingsFromSqlite();
+    const settings = await getBusinessSettingsFromMySql();
     const expectedAcc = (settings.vietqrAccountNo || "").replace(/\s+/g, "");
     if (incomingAccount && expectedAcc && incomingAccount !== expectedAcc) {
       return NextResponse.json(
@@ -103,7 +103,7 @@ export async function POST(request: Request) {
     }
 
     // Chống xử lý lặp giao dịch (Idempotency)
-    if (hasWebhookTransactionInSqlite(txId)) {
+    if (await hasWebhookTransactionInMySql(txId)) {
       return NextResponse.json({
         success: true,
         idempotent: true,
@@ -118,7 +118,7 @@ export async function POST(request: Request) {
       content.toUpperCase().match(/CF[\w-]+/i);
 
     const orderCode = match ? match[0].toUpperCase() : content.toUpperCase();
-    const order = getOrderByIdFromSqlite(orderCode);
+    const order = await getOrderByIdFromMySql(orderCode);
 
     if (!order) {
       return NextResponse.json(
@@ -135,7 +135,7 @@ export async function POST(request: Request) {
     }
 
     if (order.paymentStatus === "PAID") {
-      recordWebhookTransactionInSqlite(txId, order.id, order.orderCode, transferAmount, gateway);
+      await recordWebhookTransactionInMySql(txId, order.id, order.orderCode, transferAmount, gateway);
       return NextResponse.json({
         success: true,
         idempotent: true,
@@ -160,9 +160,9 @@ export async function POST(request: Request) {
     }
 
     const newStatus = order.status === "PENDING_PAYMENT" ? "CONFIRMED" : order.status;
-    updatePaymentStatusInSqlite(order.id, "PAID", newStatus);
-    recordWebhookTransactionInSqlite(txId, order.id, order.orderCode, transferAmount, gateway);
-    recordAuditLogInSqlite({
+    await updatePaymentStatusInMySql(order.id, "PAID", newStatus);
+    await recordWebhookTransactionInMySql(txId, order.id, order.orderCode, transferAmount, gateway);
+    await recordAuditLogInMySql({
       actorUsername: `webhook:${gateway.toLowerCase()}`,
       actorRole: "SYSTEM",
       action: "WEBHOOK_PAYMENT_CONFIRMED",
@@ -173,7 +173,7 @@ export async function POST(request: Request) {
       ipAddress: ip,
     });
 
-    const updatedOrder = getOrderByIdFromSqlite(order.id);
+    const updatedOrder = await getOrderByIdFromMySql(order.id);
     if (updatedOrder) {
       sendOrderNotificationEmail(updatedOrder).catch((e) =>
         console.error("[Webhook] Lỗi gửi mail xác nhận thanh toán:", e)

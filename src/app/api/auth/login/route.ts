@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { signAuthToken, COOKIE_NAME } from "@/lib/auth";
-import { findUserInSqlite, recordAuditLogInSqlite } from "@/lib/sqlite";
+import { findUserInMySql, recordAuditLogInMySql } from "@/lib/mysql";
 import { verifyPassword } from "@/lib/password";
 import { getTrustedClientIp } from "@/lib/serverAuth";
 import {
@@ -21,7 +21,7 @@ export async function POST(request: Request) {
     const body = await request.json();
     const { username, password, pin, loginType = "CREDENTIALS" } = body;
 
-    // Khóa bền vững bằng SQLite theo tổ hợp IP + tài khoản (hoặc kênh PIN toàn cục)
+    // Khóa bền vững bằng MySQL theo tổ hợp IP + tài khoản (hoặc kênh PIN toàn cục)
     const ipKey = `login:ip:${ip}`;
     const subjectKey =
       loginType === "PIN"
@@ -31,7 +31,7 @@ export async function POST(request: Request) {
 
     const keysToCheck = [ipKey, subjectKey, ...(pinGlobalKey ? [pinGlobalKey] : [])];
     for (const k of keysToCheck) {
-      const lockStatus = checkRateLimitLock(k);
+      const lockStatus = await checkRateLimitLock(k);
       if (!lockStatus.allowed) {
         return createRateLimitResponse(
           lockStatus.retryAfterSeconds,
@@ -56,10 +56,10 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
-      // Chỉ chấp nhận PIN đã băm scrypt của BARISTA / CASHIER trong SQLite
-      const sqliteUser = findUserInSqlite(cleanPin, true);
-      if (sqliteUser) {
-        matchedUser = sqliteUser;
+      // Chỉ chấp nhận PIN đã băm scrypt của BARISTA / CASHIER trong MySQL
+      const dbUser = await findUserInMySql(cleanPin, true);
+      if (dbUser) {
+        matchedUser = dbUser;
       }
     } else {
       const cleanUser = typeof username === "string" ? username.trim() : "";
@@ -70,21 +70,21 @@ export async function POST(request: Request) {
           { status: 400 }
         );
       }
-      // Xác thực duy nhất với SQLite sử dụng băm scrypt + timingSafeEqual
-      const sqliteUser = findUserInSqlite(cleanUser, false);
-      if (sqliteUser && verifyPassword(rawPassword, sqliteUser.passwordHash)) {
-        matchedUser = sqliteUser;
+      // Xác thực duy nhất với MySQL sử dụng băm scrypt + timingSafeEqual
+      const dbUser = await findUserInMySql(cleanUser, false);
+      if (dbUser && verifyPassword(rawPassword, dbUser.passwordHash)) {
+        matchedUser = dbUser;
       }
     }
 
     if (!matchedUser) {
-      consumeRateLimit(ipKey, MAX_ATTEMPTS, WINDOW_MS, LOCK_DURATION_MS);
-      consumeRateLimit(subjectKey, MAX_ATTEMPTS, WINDOW_MS, LOCK_DURATION_MS);
+      await consumeRateLimit(ipKey, MAX_ATTEMPTS, WINDOW_MS, LOCK_DURATION_MS);
+      await consumeRateLimit(subjectKey, MAX_ATTEMPTS, WINDOW_MS, LOCK_DURATION_MS);
       if (pinGlobalKey) {
-        consumeRateLimit(pinGlobalKey, MAX_ATTEMPTS * 2, WINDOW_MS, LOCK_DURATION_MS);
+        await consumeRateLimit(pinGlobalKey, MAX_ATTEMPTS * 2, WINDOW_MS, LOCK_DURATION_MS);
       }
 
-      recordAuditLogInSqlite({
+      await recordAuditLogInMySql({
         actorUsername: loginType === "PIN" ? "kds-pin" : String(username || "unknown").trim().slice(0, 60),
         actorRole: "ANONYMOUS",
         action: "AUTH_LOGIN_FAILED",
@@ -108,11 +108,11 @@ export async function POST(request: Request) {
       );
     }
 
-    resetRateLimit(ipKey);
-    resetRateLimit(subjectKey);
-    if (pinGlobalKey) resetRateLimit(pinGlobalKey);
+    await resetRateLimit(ipKey);
+    await resetRateLimit(subjectKey);
+    if (pinGlobalKey) await resetRateLimit(pinGlobalKey);
 
-    recordAuditLogInSqlite({
+    await recordAuditLogInMySql({
       actorId: matchedUser.id,
       actorUsername: matchedUser.username,
       actorRole: matchedUser.role,

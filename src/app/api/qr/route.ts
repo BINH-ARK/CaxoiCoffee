@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import { FACEBOOK_FANPAGE_URL, XANH_SM_ONELINK } from "@/lib/utils";
-import { getBusinessSettingsFromSqlite } from "@/lib/sqlite";
+import { getBusinessSettingsFromMySql } from "@/lib/mysql";
 
 export const dynamic = "force-dynamic";
 
@@ -40,7 +40,7 @@ export async function GET(request: Request) {
   }
 
   // Chỉ cho phép tạo QR cho các liên kết đã được Admin cấu hình chính thức của quán
-  const settings = getBusinessSettingsFromSqlite();
+  const settings = await getBusinessSettingsFromMySql();
   const allowedUrls = new Set(
     [
       FACEBOOK_FANPAGE_URL,

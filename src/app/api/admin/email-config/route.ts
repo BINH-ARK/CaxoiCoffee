@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import { getTrustedClientIp, requireStaffAuth } from "@/lib/serverAuth";
-import { recordAuditLogInSqlite } from "@/lib/sqlite";
+import { recordAuditLogInMySql } from "@/lib/mysql";
 
 export const dynamic = "force-dynamic";
 
@@ -119,7 +119,7 @@ export async function POST(request: Request) {
       console.error("[Email Config API] Lỗi ghi file .env:", fileErr.message);
     }
 
-    recordAuditLogInSqlite({
+    await recordAuditLogInMySql({
       actorId: auth.staff.id,
       actorUsername: auth.staff.username,
       actorRole: auth.staff.role,

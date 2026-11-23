@@ -1,6 +1,6 @@
 import nodemailer from "nodemailer";
 import { Order } from "@/types";
-import { getNotificationStaffEmails } from "@/lib/sqlite";
+import { getNotificationStaffEmails } from "@/lib/mysql";
 import { escapeHtml, getTelHref } from "@/lib/utils";
 
 function getTrustedBaseUrl(): string {
@@ -360,7 +360,7 @@ export async function sendOrderNotificationEmail(
   order: Order
 ): Promise<{ success: boolean; sentTo: string[]; error?: string }> {
   try {
-    const staffList = getNotificationStaffEmails();
+    const staffList = await getNotificationStaffEmails();
     if (!staffList || staffList.length === 0) {
       return { success: false, sentTo: [], error: "NO_STAFF_EMAILS" };
     }

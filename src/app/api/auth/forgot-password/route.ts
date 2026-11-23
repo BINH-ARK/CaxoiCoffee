@@ -1,11 +1,11 @@
 import { NextResponse } from "next/server";
 import crypto from "crypto";
 import {
-  getStaffByUsernameFromSqlite,
-  savePasswordResetOtpInSqlite,
-  verifyAndResetPasswordWithOtpInSqlite,
-  recordAuditLogInSqlite,
-} from "@/lib/sqlite";
+  getStaffByUsernameFromMySql,
+  savePasswordResetOtpInMySql,
+  verifyAndResetPasswordWithOtpInMySql,
+  recordAuditLogInMySql,
+} from "@/lib/mysql";
 import { sendPasswordResetOtpEmail } from "@/lib/mail";
 import { getTrustedClientIp, verifySameOriginCsrf } from "@/lib/serverAuth";
 import { consumeRateLimit, createRateLimitResponse } from "@/lib/rateLimit";
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
 
   try {
     const ip = getTrustedClientIp(request);
-    const rl = consumeRateLimit(`auth:forgot:${ip}`, 10, 15 * 60 * 1000, 3 * 60 * 1000);
+    const rl = await consumeRateLimit(`auth:forgot:${ip}`, 10, 15 * 60 * 1000, 3 * 60 * 1000);
     if (!rl.allowed) {
       return createRateLimitResponse(
         rl.retryAfterSeconds,
@@ -35,7 +35,7 @@ export async function POST(request: Request) {
       );
     }
 
-    const staff = getStaffByUsernameFromSqlite(username);
+    const staff = await getStaffByUsernameFromMySql(username);
     if (!staff || !staff.isActive) {
       return NextResponse.json(
         { success: false, message: `Không tìm thấy tài khoản hoạt động với tên đăng nhập "${username}".` },
@@ -45,7 +45,7 @@ export async function POST(request: Request) {
 
     if (action === "REQUEST_OTP") {
       const otp = String(crypto.randomInt(100000, 1000000));
-      const saved = savePasswordResetOtpInSqlite(staff.id, otp, 10 * 60 * 1000);
+      const saved = await savePasswordResetOtpInMySql(staff.id, otp, 10 * 60 * 1000);
       if (!saved) {
         return NextResponse.json(
           { success: false, message: "Không thể khởi tạo mã OTP. Vui lòng thử lại." },
@@ -63,7 +63,7 @@ export async function POST(request: Request) {
         `[Cà Xòi Forgot Password OTP] Tài khoản @${staff.username} -> Mã OTP: ${otp} (hiệu lực 10 phút)`
       );
 
-      recordAuditLogInSqlite({
+      await recordAuditLogInMySql({
         actorId: staff.id,
         actorUsername: staff.username,
         actorRole: staff.role,
@@ -111,7 +111,7 @@ export async function POST(request: Request) {
         );
       }
 
-      const resetRes = verifyAndResetPasswordWithOtpInSqlite(staff.id, otp, newPassword);
+      const resetRes = await verifyAndResetPasswordWithOtpInMySql(staff.id, otp, newPassword);
       if (!resetRes.success) {
         return NextResponse.json(
           { success: false, message: resetRes.message },
@@ -119,7 +119,7 @@ export async function POST(request: Request) {
         );
       }
 
-      recordAuditLogInSqlite({
+      await recordAuditLogInMySql({
         actorId: staff.id,
         actorUsername: staff.username,
         actorRole: staff.role,
