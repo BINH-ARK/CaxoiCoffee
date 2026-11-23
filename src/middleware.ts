@@ -1,16 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
-
-const COOKIE_NAME = "cafe_auth_token";
-
-function getEdgeJwtSecretKey(): Uint8Array | null {
-  const secret = process.env.JWT_SECRET?.trim();
-  if (!secret || secret.length < 32) {
-    return null;
-  }
-  return new TextEncoder().encode(secret);
-}
+import { COOKIE_NAME, resolveJwtSecretKey } from "@/lib/auth";
 
 function checkEdgeCsrf(request: NextRequest): NextResponse | null {
   const method = request.method.toUpperCase();
@@ -78,7 +69,7 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  const secretKey = getEdgeJwtSecretKey();
+  const secretKey = await resolveJwtSecretKey();
   if (!secretKey) {
     if (isAdminApiRoute) {
       return NextResponse.json(
