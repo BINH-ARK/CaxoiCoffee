@@ -19,7 +19,7 @@ import {
   ShippingFeeMode,
   AuditLogEntry,
 } from "@/types";
-import { INITIAL_CATEGORIES, INITIAL_PRODUCTS, INITIAL_SETTINGS } from "@/lib/store";
+import { INITIAL_CATEGORIES, INITIAL_OPTIONS, INITIAL_PRODUCTS, INITIAL_SETTINGS } from "@/lib/store";
 import { parseProductTags } from "@/lib/utils";
 import { hashPassword, isScryptHash, verifyPassword } from "@/lib/password";
 
@@ -1454,7 +1454,7 @@ export async function getCategoriesFromMySql(): Promise<Category[]> {
     }));
   } catch (error) {
     console.error("[MySQL] Lỗi getCategoriesFromMySql:", error);
-    return [];
+    return INITIAL_CATEGORIES.map((c) => ({ ...c }));
   }
 }
 
@@ -1507,7 +1507,11 @@ export async function getProductsFromMySql(): Promise<Product[]> {
     });
   } catch (error) {
     console.error("[MySQL] Lỗi getProductsFromMySql:", error);
-    return [];
+    return INITIAL_PRODUCTS.map((p) => ({
+      ...p,
+      tags: [...p.tags],
+      variants: p.variants.map((v) => ({ ...v })),
+    }));
   }
 }
 
@@ -1706,7 +1710,10 @@ export async function getProductOptionsFromMySql(): Promise<ProductOption[]> {
     }));
   } catch (error) {
     console.error("[MySQL] Lỗi getProductOptionsFromMySql:", error);
-    return [];
+    return INITIAL_OPTIONS.map((o) => ({
+      ...o,
+      values: o.values.map((v) => ({ ...v })),
+    }));
   }
 }
 
