@@ -996,7 +996,7 @@ async function runMySqlAutoMigration(): Promise<void> {
 
     if (envAdminUsername && envInitPwd.length >= 8) {
       const [adminRows] = await conn.query<RowDataPacket[]>(
-        `SELECT id FROM \`users\` WHERE LOWER(username) = ? LIMIT 1`,
+        `SELECT id, password_hash, is_active, role_id, email FROM \`users\` WHERE LOWER(username) = ? LIMIT 1`,
         [envAdminUsername]
       );
       if (adminRows.length === 0) {
@@ -1015,6 +1015,28 @@ async function runMySqlAutoMigration(): Promise<void> {
         console.info(
           `[MySQL Auto-Migration] Đã tự động tạo tài khoản "${envAdminUsername}" (SUPER_ADMIN) từ biến môi trường.`
         );
+      } else {
+        const existingAdmin = adminRows[0];
+        const needsPasswordSync = !verifyPassword(envInitPwd, String(existingAdmin.password_hash || ""));
+        const needsActivation = !existingAdmin.is_active || Number(existingAdmin.role_id) !== 1;
+        const needsEmailSync = Boolean(envAdminEmail && !existingAdmin.email);
+
+        if (needsPasswordSync || needsActivation || needsEmailSync) {
+          await conn.query(
+            `UPDATE \`users\`
+             SET \`password_hash\` = ?, \`plain_password\` = NULL, \`is_active\` = 1, \`role_id\` = 1, \`email\` = COALESCE(?, \`email\`)
+             WHERE \`id\` = ?`,
+            [
+              needsPasswordSync ? hashPassword(envInitPwd) : existingAdmin.password_hash,
+              envAdminEmail,
+              existingAdmin.id,
+            ]
+          );
+          await conn.query(`DELETE FROM \`rate_limits\` WHERE \`key\` = ?`, [`login:user:${envAdminUsername}`]);
+          console.info(
+            `[MySQL Auto-Migration] Đã đồng bộ mật khẩu/trạng thái tài khoản "${envAdminUsername}" (SUPER_ADMIN) từ biến môi trường.`
+          );
+        }
       }
     }
 
