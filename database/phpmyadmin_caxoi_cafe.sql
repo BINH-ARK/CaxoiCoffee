@@ -78,8 +78,8 @@ CREATE TABLE `categories` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `categories` (`id`, `name`, `slug`, `description`, `image_url`, `display_order`, `is_active`) VALUES
-(1, 'Cà Hê Truyền Thống & Chai Rót', 'ca-he-truyen-thong', 'Cà phê Robusta đậm vị, có sẵn Ly uống liền hoặc Chai 100ml & 250ml tiện lợi', 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=600&auto=format&fit=crop&q=80', 1, 1),
-(2, 'Dòng Kem Trứng Muối & Kem Muối Xứ Huế', 'dong-kem-trung-muoi', 'Signature Cà Xòi: Kem trứng muối vàng óng béo ngậy & Kem muối xứ Huế sánh mịn', 'https://images.unsplash.com/photo-1572442388796-11668a67e53d?w=600&auto=format&fit=crop&q=80', 2, 1);
+(1, 'Cà Hê Truyền Thống & Chai Rót', 'ca-he-truyen-thong', 'Cà phê Robusta đậm vị, có sẵn Ly uống liền hoặc Chai 100ml & 250ml tiện lợi', '/images/menu-ca-he-den.jpg', 1, 1),
+(2, 'Dòng Kem Trứng Muối & Kem Muối Xứ Huế', 'dong-kem-trung-muoi', 'Signature Cà Xòi: Kem trứng muối vàng óng béo ngậy & Kem muối xứ Huế sánh mịn', '/images/menu-ca-he-trung-muoi.jpg', 2, 1);
 
 -- --------------------------------------------------------
 -- 5. BẢNG SẢN PHẨM (PRODUCTS - 5 MÓN NGUYÊN BẢN CÀ XÒI)
@@ -105,11 +105,11 @@ CREATE TABLE `products` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO `products` (`id`, `category_id`, `name`, `slug`, `description`, `image_url`, `base_price`, `sale_price`, `is_available`, `is_featured`, `prep_time_minutes`, `tags`) VALUES
-('b0000000-0000-0000-0000-000000000001', 1, 'Cà hê đen', 'ca-he-den', 'Cà phê đen phin Robusta Đắk Lắk đậm đà nguyên bản, vị đắng dịu hậu ngọt sâu chuẩn gu Cà Xòi', 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=600&auto=format&fit=crop&q=80', 13000.00, NULL, 1, 1, 3, 'BEST_SELLER,SIGNATURE'),
-('b0000000-0000-0000-0000-000000000002', 1, 'Cà hê sữa', 'ca-he-sua', 'Cà phê phin đậm đà hòa quyện cùng sữa đặc ngọt béo thơm lừng truyền thống, uống là mê mẩn', 'https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?w=600&auto=format&fit=crop&q=80', 16000.00, NULL, 1, 1, 4, 'BEST_SELLER,SIGNATURE'),
-('b0000000-0000-0000-0000-000000000003', 1, 'Bạc xĩuuuu', 'bac-xiuuuu', 'Nhiều sữa béo thơm dịu ngọt quyện cùng một xíu cà phê thơm nhẹ nhàng, gu ngọt ngào cưng xỉu', 'https://images.unsplash.com/photo-1572442388796-11668a67e53d?w=600&auto=format&fit=crop&q=80', 19000.00, NULL, 1, 1, 4, 'BEST_SELLER'),
-('b0000000-0000-0000-0000-000000000004', 2, 'Cà hê múi huệ', 'ca-he-mui-hue', 'Lớp kem muối béo mặn mượt mà đặc trưng xứ Huế, hòa quyện cà phê cốt phin đậm đà gây nghiện', 'https://images.unsplash.com/photo-1582293041079-7814c2f12063?w=600&auto=format&fit=crop&q=80', 23000.00, NULL, 1, 1, 4, 'SIGNATURE,BEST_SELLER,HOT'),
-('b0000000-0000-0000-0000-000000000005', 2, 'Cà hê trứng múi', 'ca-he-trung-mui', 'Signature Cà Xòi! Kem trứng muối vàng óng béo ngậy ngọt mặn, cực thơm bùi, nhấp một ngụm là tỉnh táo tức thì', 'https://images.unsplash.com/photo-1570968915860-54d5c301fa9f?w=600&auto=format&fit=crop&q=80', 25000.00, NULL, 1, 1, 5, 'SIGNATURE,BEST_SELLER,HOT');
+('b0000000-0000-0000-0000-000000000001', 1, 'Cà hê đen', 'ca-he-den', 'Cà phê đen phin Robusta Đắk Lắk đậm đà nguyên bản, vị đắng dịu hậu ngọt sâu chuẩn gu Cà Xòi', '/images/menu-ca-he-den.jpg', 13000.00, NULL, 1, 1, 3, 'BEST_SELLER,SIGNATURE'),
+('b0000000-0000-0000-0000-000000000002', 1, 'Cà hê sữa', 'ca-he-sua', 'Cà phê phin đậm đà hòa quyện cùng sữa đặc ngọt béo thơm lừng truyền thống, uống là mê mẩn', '/images/menu-ca-he-sua.jpg', 16000.00, NULL, 1, 1, 4, 'BEST_SELLER,SIGNATURE'),
+('b0000000-0000-0000-0000-000000000003', 1, 'Bạc xĩuuuu', 'bac-xiuuuu', 'Nhiều sữa béo thơm dịu ngọt quyện cùng một xíu cà phê thơm nhẹ nhàng, gu ngọt ngào cưng xỉu', '/images/menu-bac-xiu.jpg', 19000.00, NULL, 1, 1, 4, 'BEST_SELLER'),
+('b0000000-0000-0000-0000-000000000004', 2, 'Cà hê múi huệ', 'ca-he-mui-hue', 'Lớp kem muối béo mặn mượt mà đặc trưng xứ Huế, hòa quyện cà phê cốt phin đậm đà gây nghiện', '/images/menu-ca-he-muoi.jpg', 23000.00, NULL, 1, 1, 4, 'SIGNATURE,BEST_SELLER,HOT'),
+('b0000000-0000-0000-0000-000000000005', 2, 'Cà hê trứng múi', 'ca-he-trung-mui', 'Signature Cà Xòi! Kem trứng muối vàng óng béo ngậy ngọt mặn, cực thơm bùi, nhấp một ngụm là tỉnh táo tức thì', '/images/menu-ca-he-trung-muoi.jpg', 25000.00, NULL, 1, 1, 5, 'SIGNATURE,BEST_SELLER,HOT');
 
 -- --------------------------------------------------------
 -- 6. BẢNG QUY CÁCH / SIZE (PRODUCT_VARIANTS: LY • 100ML • 250ML)

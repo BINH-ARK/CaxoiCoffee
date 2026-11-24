@@ -403,6 +403,30 @@ async function syncEnvSuperAdmin(conn: PoolConnection): Promise<void> {
   }
 }
 
+async function syncDefaultMenuImages(conn: PoolConnection): Promise<void> {
+  // Cập nhật ảnh thật cho 5 món chuẩn & 2 danh mục nếu DB vẫn đang dùng ảnh mẫu Unsplash cũ hoặc rỗng
+  for (const p of INITIAL_PRODUCTS) {
+    if (!p.imageUrl) continue;
+    await conn.query(
+      `UPDATE \`products\`
+       SET \`image_url\` = ?
+       WHERE (\`slug\` = ? OR \`id\` = ?)
+         AND (\`image_url\` IS NULL OR \`image_url\` = '' OR \`image_url\` LIKE 'https://images.unsplash.com/%')`,
+      [p.imageUrl, p.slug, p.id]
+    );
+  }
+  for (const c of INITIAL_CATEGORIES) {
+    if (!c.imageUrl) continue;
+    await conn.query(
+      `UPDATE \`categories\`
+       SET \`image_url\` = ?
+       WHERE (\`slug\` = ? OR \`id\` = ?)
+         AND (\`image_url\` IS NULL OR \`image_url\` = '' OR \`image_url\` LIKE 'https://images.unsplash.com/%')`,
+      [c.imageUrl, c.slug, c.id]
+    );
+  }
+}
+
 async function runMySqlAutoMigration(): Promise<void> {
   const currentPool = getMySqlPool();
   const conn = await currentPool.getConnection();
@@ -418,6 +442,7 @@ async function runMySqlAutoMigration(): Promise<void> {
       );
       if (Number(seedCheck[0]?.p_cnt || 0) > 0 && Number(seedCheck[0]?.r_cnt || 0) > 0) {
         await syncEnvSuperAdmin(conn);
+        await syncDefaultMenuImages(conn);
         return;
       }
     }
@@ -1193,6 +1218,8 @@ async function runMySqlAutoMigration(): Promise<void> {
           );
         }
       }
+    } else {
+      await syncDefaultMenuImages(conn);
     }
 
     // Seed product_options & values nếu trống

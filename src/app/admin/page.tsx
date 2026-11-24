@@ -96,7 +96,7 @@ export default function AdminPage() {
   }>({
     name: "",
     description: "",
-    imageUrl: "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=600&auto=format&fit=crop&q=80",
+    imageUrl: "/images/menu-ca-he-den.jpg",
     categoryId: 1,
     basePrice: 30000,
     salePrice: null,
@@ -418,7 +418,7 @@ export default function AdminPage() {
     setProductForm({
       name: product.name,
       description: product.description,
-      imageUrl: product.imageUrl || "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=600&auto=format&fit=crop&q=80",
+      imageUrl: product.imageUrl || "/images/menu-ca-he-den.jpg",
       categoryId: product.categoryId || 1,
       basePrice: product.basePrice,
       salePrice: product.salePrice ?? null,
@@ -438,7 +438,7 @@ export default function AdminPage() {
     setProductForm({
       name: "",
       description: "",
-      imageUrl: "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=600&auto=format&fit=crop&q=80",
+      imageUrl: "/images/menu-ca-he-den.jpg",
       categoryId: 1,
       basePrice: 20000,
       salePrice: null,
@@ -1241,7 +1241,7 @@ export default function AdminPage() {
                                     alt={p.name}
                                     className="w-full h-full object-cover"
                                     onError={(e) => {
-                                      (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=600&auto=format&fit=crop&q=80";
+                                      (e.target as HTMLImageElement).src = "/images/menu-ca-he-den.jpg";
                                     }}
                                   />
                                 ) : (
@@ -2482,7 +2482,7 @@ export default function AdminPage() {
                           className="w-full h-full object-cover"
                           onError={(e) => {
                             (e.target as HTMLImageElement).src =
-                              "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=600&auto=format&fit=crop&q=80";
+                              "/images/menu-ca-he-den.jpg";
                           }}
                         />
                       ) : (

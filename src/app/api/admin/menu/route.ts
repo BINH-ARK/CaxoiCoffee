@@ -11,8 +11,7 @@ import { sanitizeImageUrl } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
-const DEFAULT_COFFEE_IMG =
-  "https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=600&auto=format&fit=crop&q=80";
+const DEFAULT_COFFEE_IMG = "/images/menu-ca-he-den.jpg";
 
 export async function POST(request: Request) {
   try {

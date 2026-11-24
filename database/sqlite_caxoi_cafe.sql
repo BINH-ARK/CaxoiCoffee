@@ -166,8 +166,8 @@ CREATE TABLE categories (
 );
 
 INSERT INTO categories (id, name, slug, description, image_url, display_order, is_active) VALUES
-(1, 'Cà Hê Truyền Thống & Chai Rót', 'ca-he-truyen-thong', 'Cà phê Robusta đậm vị, có sẵn Ly uống liền hoặc Chai 100ml & 250ml tiện lợi', 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=600&auto=format&fit=crop&q=80', 1, 1),
-(2, 'Dòng Kem Trứng Muối & Kem Muối Xứ Huế', 'dong-kem-trung-muoi', 'Signature Cà Xòi: Kem trứng muối vàng óng béo ngậy & Kem muối xứ Huế sánh mịn', 'https://images.unsplash.com/photo-1572442388796-11668a67e53d?w=600&auto=format&fit=crop&q=80', 2, 1);
+(1, 'Cà Hê Truyền Thống & Chai Rót', 'ca-he-truyen-thong', 'Cà phê Robusta đậm vị, có sẵn Ly uống liền hoặc Chai 100ml & 250ml tiện lợi', '/images/menu-ca-he-den.jpg', 1, 1),
+(2, 'Dòng Kem Trứng Muối & Kem Muối Xứ Huế', 'dong-kem-trung-muoi', 'Signature Cà Xòi: Kem trứng muối vàng óng béo ngậy & Kem muối xứ Huế sánh mịn', '/images/menu-ca-he-trung-muoi.jpg', 2, 1);
 
 -- ----------------------------------------------------------------------------
 -- 6. BẢNG SẢN PHẨM (PRODUCTS - 5 MÓN CHUẨN MENU CÀ XÒI)
@@ -189,11 +189,11 @@ CREATE TABLE products (
 );
 
 INSERT INTO products (id, category_id, name, slug, description, image_url, base_price, sale_price, is_available, is_featured, prep_time_minutes, tags) VALUES
-('p1', 1, 'Cà hê đen', 'ca-he-den', 'Cà phê đen phin Robusta Đắk Lắk đậm đà nguyên bản, vị đắng dịu hậu ngọt sâu chuẩn gu Cà Xòi', 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefdd?w=600&auto=format&fit=crop&q=80', 13000, NULL, 1, 1, 3, 'BEST_SELLER,SIGNATURE'),
-('p2', 1, 'Cà hê sữa', 'ca-he-sua', 'Cà phê phin đậm đà hòa quyện cùng sữa đặc ngọt béo thơm lừng truyền thống, uống là mê mẩn', 'https://images.unsplash.com/photo-1517701550927-30cf4ba1dba5?w=600&auto=format&fit=crop&q=80', 16000, NULL, 1, 1, 4, 'BEST_SELLER,SIGNATURE'),
-('p3', 1, 'Bạc xĩuuuu', 'bac-xiuuuu', 'Nhiều sữa đặc ngọt béo ngậy, sữa tươi thanh trùng thơm mát kết hợp lớp cốt cà phê phin sánh mịn nhẹ nhàng', 'https://images.unsplash.com/photo-1572442388796-11668a67e53d?w=600&auto=format&fit=crop&q=80', 19000, NULL, 1, 1, 4, 'POPULAR,OFFICE_FAVORITE'),
-('p4', 2, 'Cà hê múi huệ', 'ca-he-mui-hue', 'Cà phê phin đậm đà phủ lớp kem muối xứ Huế béo ngậy mằn mặn đặc trưng, công thức độc quyền Cà Xòi', 'https://images.unsplash.com/photo-1582293041079-7814c2f12063?w=600&auto=format&fit=crop&q=80', 23000, NULL, 1, 1, 5, 'SIGNATURE,MUST_TRY'),
-('p5', 2, 'Cà hê trứng múi', 'ca-he-trung-mui', 'Siêu phẩm trứ danh Quán Cà Xòi: Cốt cà phê đậm sóng sánh phủ đầy lớp kem trứng muối vàng óng béo ngậy ngất ngây', 'https://images.unsplash.com/photo-1534778101976-62847782c213?w=600&auto=format&fit=crop&q=80', 25000, NULL, 1, 1, 5, 'HOT_TREND,SIGNATURE,BEST_SELLER');
+('p1', 1, 'Cà hê đen', 'ca-he-den', 'Cà phê đen phin Robusta Đắk Lắk đậm đà nguyên bản, vị đắng dịu hậu ngọt sâu chuẩn gu Cà Xòi', '/images/menu-ca-he-den.jpg', 13000, NULL, 1, 1, 3, 'BEST_SELLER,SIGNATURE'),
+('p2', 1, 'Cà hê sữa', 'ca-he-sua', 'Cà phê phin đậm đà hòa quyện cùng sữa đặc ngọt béo thơm lừng truyền thống, uống là mê mẩn', '/images/menu-ca-he-sua.jpg', 16000, NULL, 1, 1, 4, 'BEST_SELLER,SIGNATURE'),
+('p3', 1, 'Bạc xĩuuuu', 'bac-xiuuuu', 'Nhiều sữa đặc ngọt béo ngậy, sữa tươi thanh trùng thơm mát kết hợp lớp cốt cà phê phin sánh mịn nhẹ nhàng', '/images/menu-bac-xiu.jpg', 19000, NULL, 1, 1, 4, 'POPULAR,OFFICE_FAVORITE'),
+('p4', 2, 'Cà hê múi huệ', 'ca-he-mui-hue', 'Cà phê phin đậm đà phủ lớp kem muối xứ Huế béo ngậy mằn mặn đặc trưng, công thức độc quyền Cà Xòi', '/images/menu-ca-he-muoi.jpg', 23000, NULL, 1, 1, 5, 'SIGNATURE,MUST_TRY'),
+('p5', 2, 'Cà hê trứng múi', 'ca-he-trung-mui', 'Siêu phẩm trứ danh Quán Cà Xòi: Cốt cà phê đậm sóng sánh phủ đầy lớp kem trứng muối vàng óng béo ngậy ngất ngây', '/images/menu-ca-he-trung-muoi.jpg', 25000, NULL, 1, 1, 5, 'HOT_TREND,SIGNATURE,BEST_SELLER');
 
 -- ----------------------------------------------------------------------------
 -- 7. BẢNG QUY CÁCH ĐÓNG GÓI / KÍCH CỠ (VARIANTS: Ly, 100ml, 250ml)
