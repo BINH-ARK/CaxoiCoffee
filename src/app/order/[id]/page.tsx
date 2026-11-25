@@ -22,6 +22,7 @@ import {
 } from "lucide-react";
 import { Order, OrderStatus, BusinessSettings } from "@/types";
 import { formatVND, generateVietQrUrl, getTelHref } from "@/lib/utils";
+import { isOrderPaidStatus } from "@/lib/paymentStatus";
 import { getBankById } from "@/lib/vietqr";
 import PaymentThankYouModal from "@/components/PaymentThankYouModal";
 import OrderCancelledModal from "@/components/OrderCancelledModal";
@@ -57,6 +58,20 @@ export default function OrderTrackingPage() {
   const [cancelSuccessNotice, setCancelSuccessNotice] = useState<string | null>(null);
   const [showCancelledModal, setShowCancelledModal] = useState(false);
   const [showThankYouModal, setShowThankYouModal] = useState(false);
+  const [payosPayment, setPayosPayment] = useState<{
+    bin?: string;
+    checkoutUrl?: string;
+    qrImageUrl?: string | null;
+    accountNumber?: string;
+    accountName?: string;
+    description?: string;
+  } | null>(null);
+  const [isCheckingPayment, setIsCheckingPayment] = useState(false);
+  const [paymentCheckMsg, setPaymentCheckMsg] = useState<{
+    type: "success" | "info" | "error";
+    text: string;
+  } | null>(null);
+  const payosRequestedForRef = useRef<string | null>(null);
   const prevPaymentStatusRef = useRef<string | null>(null);
 
   // Đọc trackingToken từ URL (?token=...) hoặc sessionStorage khi khách vừa đặt xong
@@ -110,17 +125,17 @@ export default function OrderTrackingPage() {
             prevPaymentStatusRef.current = incomingOrder.paymentStatus;
 
             // Kích hoạt hiệu ứng "Xòi xin cảm ơn!" khi đơn chuyển sang PAID (hoặc lần đầu mở đơn đã PAID)
-            if (incomingOrder.paymentStatus === "PAID" && incomingOrder.status !== "CANCELLED") {
+            if (isOrderPaidStatus(incomingOrder.paymentStatus) && incomingOrder.status !== "CANCELLED") {
               try {
                 const thankedKey = `caxoi_thanked_${incomingOrder.id}`;
                 const alreadyThanked = sessionStorage.getItem(thankedKey) === "1";
-                const transitionedToPaid = prevPay !== null && prevPay !== "PAID";
+                const transitionedToPaid = prevPay !== null && !isOrderPaidStatus(prevPay);
                 if (transitionedToPaid || !alreadyThanked) {
                   sessionStorage.setItem(thankedKey, "1");
                   setShowThankYouModal(true);
                 }
               } catch {
-                if (prevPay !== null && prevPay !== "PAID") {
+                if (prevPay !== null && !isOrderPaidStatus(prevPay)) {
                   setShowThankYouModal(true);
                 }
               }
@@ -152,6 +167,102 @@ export default function OrderTrackingPage() {
       if (intervalId) clearInterval(intervalId);
     };
   }, [id, trackingToken]);
+
+  // Tự động lấy mã QR động & link thanh toán payOS khi đơn đang chờ thanh toán
+  useEffect(() => {
+    if (!order || order.status !== "PENDING_PAYMENT" || isOrderPaidStatus(order.paymentStatus)) {
+      return;
+    }
+    if (payosRequestedForRef.current === order.id) return;
+    payosRequestedForRef.current = order.id;
+
+    fetch("/api/payments/payos/create", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderId: order.id }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.success && data?.data) {
+          setPayosPayment({
+            bin: data.data.bin,
+            checkoutUrl: data.data.checkoutUrl,
+            qrImageUrl: data.data.qrImageUrl,
+            accountNumber: data.data.accountNumber,
+            accountName: data.data.accountName,
+            description: data.data.description,
+          });
+        }
+      })
+      .catch(() => {});
+
+    if (typeof window !== "undefined" && window.location.search.includes("payos=success")) {
+      fetch("/api/payments/payos/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: order.id }),
+      })
+        .then((res) => res.json())
+        .then((data) => {
+          if (data?.paid && data?.data) {
+            setOrder((prev) =>
+              prev
+                ? {
+                    ...prev,
+                    paymentStatus: data.data.paymentStatus,
+                    status: data.data.status,
+                    paidAmount: data.data.paidAmount,
+                  }
+                : null
+            );
+          }
+        })
+        .catch(() => {});
+    }
+  }, [order]);
+
+  const handleManualCheckPayment = async () => {
+    if (!order || isCheckingPayment) return;
+    setIsCheckingPayment(true);
+    setPaymentCheckMsg(null);
+    try {
+      const res = await fetch("/api/payments/payos/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ orderId: order.id }),
+      });
+      const data = await res.json();
+      if (data?.success && data?.paid && data?.data) {
+        setOrder((prev) =>
+          prev
+            ? {
+                ...prev,
+                paymentStatus: data.data.paymentStatus,
+                status: data.data.status,
+                paidAmount: data.data.paidAmount,
+              }
+            : null
+        );
+        setShowThankYouModal(true);
+        setPaymentCheckMsg({
+          type: "success",
+          text: data.message || "Đã xác nhận thanh toán thành công!",
+        });
+      } else {
+        setPaymentCheckMsg({
+          type: data?.success ? "info" : "error",
+          text: data?.message || "Chưa ghi nhận giao dịch mới từ payOS.",
+        });
+      }
+    } catch {
+      setPaymentCheckMsg({
+        type: "error",
+        text: "Không thể kết nối máy chủ để kiểm tra thanh toán.",
+      });
+    } finally {
+      setIsCheckingPayment(false);
+    }
+  };
 
   const handleCopyContent = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -226,7 +337,7 @@ export default function OrderTrackingPage() {
 
   // Calculate current progress index
   const statusOrderIndex = STATUS_STEPS.findIndex((s) => s.key === order.status);
-  const isPaid = order.paymentStatus === "PAID";
+  const isPaid = isOrderPaidStatus(order.paymentStatus);
   const isPendingPayment = order.status === "PENDING_PAYMENT" && !isPaid;
   const isCancelled = order.status === "CANCELLED";
   // Khi tiến trình chuẩn bị đồ uống đã chạy (đã thanh toán hoặc trạng thái không còn là PENDING_PAYMENT)
@@ -237,9 +348,9 @@ export default function OrderTrackingPage() {
   const bankId = settings?.vietqrBankId || "MB";
   const accountNo = settings?.vietqrAccountNo || "999988886666";
   const accountName = settings?.vietqrAccountName || "CA XOI CAFE";
-  const bankInfo = getBankById(bankId);
+  const bankInfo = getBankById(payosPayment?.bin || bankId);
 
-  // Generate VietQR dynamic URL
+  // Generate VietQR dynamic URL (fallback nếu chưa cấu hình payOS)
   const vietQrUrl = generateVietQrUrl({
     bankId,
     accountNo,
@@ -247,6 +358,11 @@ export default function OrderTrackingPage() {
     amount: order.totalAmount,
     description: order.orderCode,
   });
+
+  const activeQrUrl = payosPayment?.qrImageUrl || vietQrUrl;
+  const displayAccountNo = payosPayment?.accountNumber || accountNo;
+  const displayAccountName = payosPayment?.accountName || accountName;
+  const displayTransferDesc = payosPayment?.description || order.orderCode;
 
   return (
     <div className="max-w-3xl mx-auto px-4 py-4 space-y-6">
@@ -487,18 +603,84 @@ export default function OrderTrackingPage() {
                 className="w-full h-auto block object-contain"
               />
 
-              {/* Real Dynamic VietQR printed naturally onto the white card between the cat's paws */}
-              <div className="absolute left-[28.5%] top-[50.5%] w-[44%] h-[42.5%] flex items-center justify-center pointer-events-none">
-                <Image
-                  src={vietQrUrl}
-                  alt="VietQR Transfer"
-                  width={220}
-                  height={260}
-                  unoptimized
-                  priority
-                  className="w-full h-full object-contain mix-blend-multiply"
-                />
-              </div>
+              {/* Real Dynamic VietQR / Branded payOS QR printed naturally onto the white card between the cat's paws */}
+              {payosPayment?.qrImageUrl ? (
+                <div className="absolute left-[27.5%] top-[48.5%] w-[45%] h-[45%] flex flex-col items-center justify-between px-1.5 py-1.5 sm:py-2 pointer-events-none">
+                  {/* Top VietQR x payOS Brand Header */}
+                  <div className="w-full flex items-center justify-center gap-1 leading-none">
+                    <span className="text-[11px] sm:text-xs font-black tracking-tight">
+                      <span className="text-[#E11D48]">Viet</span>
+                      <span className="text-[#1D3557]">QR</span>
+                    </span>
+                    <span className="text-[8px] sm:text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded-full bg-indigo-50 text-indigo-700 border border-indigo-200/80">
+                      payOS
+                    </span>
+                  </div>
+
+                  {/* Center QR with Corner Viewfinder Accents & Mini Cà Xòi Logo */}
+                  <div className="relative w-[82%] aspect-square p-1.5 bg-white rounded-xl shadow-[0_2px_10px_rgba(66,14,38,0.08)] border border-pink-200/80 flex items-center justify-center">
+                    <span className="pointer-events-none absolute -top-0.5 -left-0.5 w-2.5 h-2.5 border-t-2 border-l-2 border-caramel rounded-tl-md" />
+                    <span className="pointer-events-none absolute -top-0.5 -right-0.5 w-2.5 h-2.5 border-t-2 border-r-2 border-caramel rounded-tr-md" />
+                    <span className="pointer-events-none absolute -bottom-0.5 -left-0.5 w-2.5 h-2.5 border-b-2 border-l-2 border-caramel rounded-bl-md" />
+                    <span className="pointer-events-none absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 border-b-2 border-r-2 border-caramel rounded-br-md" />
+
+                    <Image
+                      src={payosPayment.qrImageUrl}
+                      alt="payOS VietQR Transfer"
+                      width={320}
+                      height={320}
+                      unoptimized
+                      priority
+                      className="w-full h-full object-contain rounded"
+                    />
+
+                    {/* Centered Cà Xòi mini logo (safe with ecc=H) */}
+                    <div className="absolute inset-0 flex items-center justify-center">
+                      <div className="w-5 h-5 sm:w-6 sm:h-6 rounded-full overflow-hidden border-2 border-white shadow-sm bg-[#FFD1E3]">
+                        <Image
+                          src="/images/ca-xoi-logo.jpg"
+                          alt="Cà Xòi"
+                          width={24}
+                          height={24}
+                          unoptimized
+                          className="w-full h-full object-cover"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Bottom Napas247 + Bank + Amount Footer */}
+                  <div className="w-full text-center leading-tight space-y-0.5">
+                    <div className="flex items-center justify-center gap-1 text-[8px] sm:text-[9px] font-bold text-stone-600">
+                      <span className="text-[#005BAA] font-black italic">napas 247</span>
+                      <span className="text-stone-300">|</span>
+                      <span className="text-coffee-900 font-extrabold truncate max-w-[70px]">
+                        {bankInfo?.shortName || bankId}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-center gap-1">
+                      <span className="text-[10px] sm:text-[11px] font-black text-caramel">
+                        {formatVND(order.totalAmount)}
+                      </span>
+                      <span className="text-[8px] sm:text-[9px] font-mono font-bold text-coffee-700 bg-amber-100/80 px-1 rounded">
+                        {displayTransferDesc}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                <div className="absolute left-[28.5%] top-[50.5%] w-[44%] h-[42.5%] flex items-center justify-center pointer-events-none">
+                  <Image
+                    src={vietQrUrl}
+                    alt="VietQR Transfer"
+                    width={220}
+                    height={260}
+                    unoptimized
+                    priority
+                    className="w-full h-full object-contain mix-blend-multiply"
+                  />
+                </div>
+              )}
             </div>
 
             {/* Transfer instructions */}
@@ -511,10 +693,10 @@ export default function OrderTrackingPage() {
               <div className="flex justify-between items-center bg-white p-2.5 rounded-xl border border-amber-200">
                 <span className="text-coffee-500">Số tài khoản:</span>
                 <div className="flex items-center gap-1.5">
-                  <span className="font-mono font-bold text-caramel">{accountNo}</span>
+                  <span className="font-mono font-bold text-caramel">{displayAccountNo}</span>
                   <button
                     type="button"
-                    onClick={() => handleCopyContent(accountNo)}
+                    onClick={() => handleCopyContent(displayAccountNo)}
                     className="text-caramel hover:text-caramel-dark"
                     title="Sao chép số tài khoản"
                   >
@@ -525,18 +707,18 @@ export default function OrderTrackingPage() {
 
               <div className="flex justify-between items-center bg-white p-2.5 rounded-xl border border-amber-200">
                 <span className="text-coffee-500">Tên chủ tài khoản:</span>
-                <span className="font-bold">{accountName}</span>
+                <span className="font-bold">{displayAccountName}</span>
               </div>
 
               <div className="flex justify-between items-center bg-white p-2.5 rounded-xl border border-amber-200">
                 <span className="text-coffee-500">Nội dung CK:</span>
                 <div className="flex items-center gap-1.5">
                   <span className="font-mono font-bold text-caramel bg-amber-100 px-1.5 py-0.5 rounded">
-                    {order.orderCode}
+                    {displayTransferDesc}
                   </span>
                   <button
                     type="button"
-                    onClick={() => handleCopyContent(order.orderCode)}
+                    onClick={() => handleCopyContent(displayTransferDesc)}
                     className="text-caramel hover:text-caramel-dark"
                   >
                     <Copy className="w-3.5 h-3.5" />
@@ -551,6 +733,18 @@ export default function OrderTrackingPage() {
                 </span>
               </div>
 
+              {payosPayment?.checkoutUrl && (
+                <a
+                  href={payosPayment.checkoutUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="w-full inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2.5 px-4 rounded-xl shadow-sm transition-all"
+                >
+                  <span>Mở cổng thanh toán payOS</span>
+                  <ExternalLink className="w-3.5 h-3.5" />
+                </a>
+              )}
+
               {copied && (
                 <p className="text-[11px] text-emerald-600 font-bold text-center">
                   ✓ Đã sao chép vào bộ nhớ tạm
@@ -559,23 +753,50 @@ export default function OrderTrackingPage() {
             </div>
           </div>
 
-          {/* Real Bank Verification Notice (No client-side simulation button) */}
-          <div className="pt-3 border-t border-amber-200/80 flex flex-col sm:flex-row items-center justify-between gap-3 bg-white/80 p-3.5 rounded-2xl">
-            <div className="space-y-0.5 text-left">
-              <span className="text-xs font-bold text-coffee-900 flex items-center gap-1.5">
-                <RefreshCw className="w-3.5 h-3.5 text-emerald-600 animate-spin" />
-                Đang chờ xác nhận thanh toán tự động từ Ngân hàng
-              </span>
-              <p className="text-[11px] text-coffee-600 leading-relaxed">
-                Sau khi bạn chuyển khoản đúng nội dung <strong className="font-mono text-caramel">{order.orderCode}</strong>, hệ thống sẽ tự động đối soát trong 2–15 giây hoặc Thu ngân Cà Xòi sẽ xác nhận trực tiếp trên quầy.
-              </p>
+          {/* Real Bank Verification Notice (Active payOS sync + Webhook, no fake simulation) */}
+          <div className="pt-3 border-t border-amber-200/80 space-y-2.5 bg-white/80 p-3.5 rounded-2xl">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+              <div className="space-y-0.5 text-left">
+                <span className="text-xs font-bold text-coffee-900 flex items-center gap-1.5">
+                  <RefreshCw className="w-3.5 h-3.5 text-emerald-600 animate-spin" />
+                  Đang chờ xác nhận thanh toán tự động từ payOS / Ngân hàng
+                </span>
+                <p className="text-[11px] text-coffee-600 leading-relaxed">
+                  Sau khi bạn chuyển khoản đúng nội dung <strong className="font-mono text-caramel">{displayTransferDesc}</strong>, hệ thống sẽ tự động đối soát trong 2–15 giây hoặc bấm nút kiểm tra ngay bên cạnh.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <button
+                  type="button"
+                  onClick={handleManualCheckPayment}
+                  disabled={isCheckingPayment}
+                  className="text-xs font-bold bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-2 rounded-xl shadow-sm transition-all whitespace-nowrap flex items-center gap-1.5 disabled:opacity-60"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isCheckingPayment ? "animate-spin" : ""}`} />
+                  <span>{isCheckingPayment ? "Đang kiểm tra..." : "Tôi đã chuyển khoản"}</span>
+                </button>
+                <a
+                  href={getTelHref(settings?.hotline || "0905 249 733")}
+                  className="text-xs font-bold bg-coffee-800 hover:bg-coffee-900 text-white px-3.5 py-2 rounded-xl shadow-sm transition-all whitespace-nowrap"
+                >
+                  📞 Gọi quầy: {settings?.hotline || "0905 249 733"}
+                </a>
+              </div>
             </div>
-            <a
-              href={getTelHref(settings?.hotline || "0905 249 733")}
-              className="text-xs font-bold bg-coffee-800 hover:bg-coffee-900 text-white px-3.5 py-2 rounded-xl shadow-sm transition-all whitespace-nowrap shrink-0"
-            >
-              📞 Gọi quầy: {settings?.hotline || "0905 249 733"}
-            </a>
+
+            {paymentCheckMsg && (
+              <div
+                className={`text-[11px] font-bold px-3 py-2 rounded-xl border ${
+                  paymentCheckMsg.type === "success"
+                    ? "bg-emerald-50 text-emerald-800 border-emerald-200"
+                    : paymentCheckMsg.type === "error"
+                    ? "bg-rose-50 text-rose-800 border-rose-200"
+                    : "bg-amber-50 text-amber-900 border-amber-200"
+                }`}
+              >
+                {paymentCheckMsg.text}
+              </div>
+            )}
           </div>
 
           {/* Customer Cancel Option directly on payment card */}

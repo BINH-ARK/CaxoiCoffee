@@ -18,10 +18,13 @@ import {
   DiscountType,
   ShippingFeeMode,
   AuditLogEntry,
+  BankTransaction,
+  BankTransactionStatus,
 } from "@/types";
 import { INITIAL_CATEGORIES, INITIAL_OPTIONS, INITIAL_PRODUCTS, INITIAL_SETTINGS } from "@/lib/store";
 import { parseProductTags } from "@/lib/utils";
 import { hashPassword, isScryptHash, verifyPassword } from "@/lib/password";
+import { isOrderPaidStatus, normalizeOrderCodeKey } from "@/lib/paymentStatus";
 
 export interface DatabaseStatus {
   connected: boolean;
@@ -350,7 +353,7 @@ const REQUIRED_MYSQL_TABLES = [
 ];
 
 async function syncEnvSuperAdmin(conn: PoolConnection): Promise<void> {
-  const envAdminUsername = (process.env.ADMIN_USERNAME || "admin").trim().toLowerCase();
+  const envAdminUsername = (process.env.ADMIN_USERNAME || "quynhnhu").trim().toLowerCase();
   const envInitPwd = (process.env.ADMIN_PASSWORD || process.env.INIT_ADMIN_PASSWORD || "").trim();
   const envAdminEmail = process.env.ADMIN_EMAIL?.trim() || null;
 
@@ -2115,6 +2118,9 @@ function mapOrderRow(o: RowDataPacket, itemRows: RowDataPacket[]): Order {
     discountAmount: Number(o.discount_amount || 0),
     deliveryFee: Number(o.delivery_fee || 0),
     totalAmount: Number(o.total_amount),
+    paidAmount: Number(o.paid_amount || 0),
+    paidAt: o.paid_at ? normalizeTimestamp(o.paid_at) : null,
+    paymentNote: o.payment_note || null,
     promotionCode: o.promotion_code || undefined,
     groupSessionId: o.group_session_id || undefined,
     baristaNotes: o.barista_notes || undefined,
@@ -2409,6 +2415,10 @@ export async function updateOrderStatusInMySql(
       if (options.paymentStatus !== undefined) {
         updates.push("payment_status = ?");
         params.push(options.paymentStatus);
+        if (isOrderPaidStatus(options.paymentStatus)) {
+          updates.push("paid_at = COALESCE(paid_at, NOW())");
+          updates.push("paid_amount = CASE WHEN COALESCE(paid_amount, 0) = 0 THEN total_amount ELSE paid_amount END");
+        }
       }
       if (options.shipperName !== undefined) {
         updates.push("shipper_name = ?");
@@ -4533,5 +4543,421 @@ export async function getAuditLogsFromMySql(filters?: {
   } catch (err: any) {
     console.error("[AuditLog MySQL Read Error]", err?.message);
     return [];
+  }
+}
+
+
+// ============================================================================
+// 11. BANK TRANSACTIONS & PAYOS RECONCILIATION
+// ============================================================================
+
+function mapBankTransactionRow(r: RowDataPacket): BankTransaction {
+  let rawPayload: Record<string, any> | null = null;
+  if (r.raw_payload) {
+    try {
+      rawPayload = typeof r.raw_payload === "string" ? JSON.parse(r.raw_payload) : r.raw_payload;
+    } catch {
+      rawPayload = null;
+    }
+  }
+
+  return {
+    id: Number(r.id),
+    sepayId: String(r.sepay_id),
+    gateway: r.gateway || null,
+    transactionDate: r.transaction_date || null,
+    accountNumber: r.account_number || null,
+    transferType: String(r.transfer_type || "in"),
+    transferAmount: Number(r.transfer_amount || 0),
+    content: r.content || null,
+    referenceCode: r.reference_code || null,
+    matchedOrderCode: r.matched_order_code || null,
+    status: String(r.status || "UNMATCHED") as BankTransactionStatus,
+    rawPayload,
+    createdAt: normalizeTimestamp(r.created_at),
+    updatedAt: normalizeTimestamp(r.updated_at),
+  };
+}
+
+export async function getBankTransactionsFromMySql(filter?: {
+  status?: string;
+  search?: string;
+  limit?: number;
+}): Promise<{
+  transactions: BankTransaction[];
+  summary: {
+    total: number;
+    matched: number;
+    underpaid: number;
+    unmatched: number;
+    duplicate: number;
+    totalMatchedAmount: number;
+  };
+}> {
+  const currentPool = await ensureMySqlInitialized();
+  const limit = Math.max(1, Math.min(300, Math.floor(filter?.limit || 100)));
+  const conditions: string[] = [];
+  const params: any[] = [];
+
+  if (filter?.status && filter.status !== "ALL") {
+    conditions.push("status = ?");
+    params.push(filter.status);
+  }
+
+  if (filter?.search && filter.search.trim()) {
+    const s = `%${filter.search.trim()}%`;
+    conditions.push(
+      "(sepay_id LIKE ? OR content LIKE ? OR matched_order_code LIKE ? OR reference_code LIKE ? OR gateway LIKE ?)"
+    );
+    params.push(s, s, s, s, s);
+  }
+
+  const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  const [rows] = await currentPool.query<RowDataPacket[]>(
+    `SELECT * FROM bank_transactions ${whereClause} ORDER BY id DESC LIMIT ?`,
+    [...params, limit]
+  );
+
+  const [aggRows] = await currentPool.query<RowDataPacket[]>(`
+    SELECT
+      COUNT(*) AS total,
+      SUM(CASE WHEN status = 'MATCHED' THEN 1 ELSE 0 END) AS matched,
+      SUM(CASE WHEN status = 'UNDERPAID' THEN 1 ELSE 0 END) AS underpaid,
+      SUM(CASE WHEN status = 'UNMATCHED' THEN 1 ELSE 0 END) AS unmatched,
+      SUM(CASE WHEN status = 'DUPLICATE' THEN 1 ELSE 0 END) AS duplicate,
+      COALESCE(SUM(CASE WHEN status = 'MATCHED' THEN transfer_amount ELSE 0 END), 0) AS totalMatchedAmount
+    FROM bank_transactions
+  `);
+
+  const agg = aggRows[0] || {};
+  return {
+    transactions: rows.map(mapBankTransactionRow),
+    summary: {
+      total: Number(agg.total || 0),
+      matched: Number(agg.matched || 0),
+      underpaid: Number(agg.underpaid || 0),
+      unmatched: Number(agg.unmatched || 0),
+      duplicate: Number(agg.duplicate || 0),
+      totalMatchedAmount: Number(agg.totalMatchedAmount || 0),
+    },
+  };
+}
+
+export async function processBankWebhookInMySql(input: {
+  sepayId: string;
+  gateway: string;
+  transactionDate: string;
+  accountNumber: string | null;
+  transferType: string;
+  transferAmount: number;
+  content: string;
+  referenceCode: string | null;
+  orderCodeCandidates: string[];
+  rawPayload: Record<string, any>;
+}): Promise<{
+  outcome: "MATCHED" | "UNDERPAID" | "UNMATCHED" | "DUPLICATE";
+  orderId: string | null;
+  orderCode: string | null;
+  paidAmount?: number;
+  totalAmount?: number;
+  shortfall?: number;
+}> {
+  const currentPool = await ensureMySqlInitialized();
+  const conn = await currentPool.getConnection();
+  const rawPayloadStr = JSON.stringify(input.rawPayload ?? {});
+
+  try {
+    await conn.beginTransaction();
+
+    const [existingTx] = await conn.query<RowDataPacket[]>(
+      `SELECT id, matched_order_code, status FROM bank_transactions WHERE sepay_id = ? LIMIT 1 FOR UPDATE`,
+      [input.sepayId]
+    );
+    if (existingTx.length > 0) {
+      await conn.commit();
+      return {
+        outcome: "DUPLICATE",
+        orderId: null,
+        orderCode: existingTx[0].matched_order_code ? String(existingTx[0].matched_order_code) : null,
+      };
+    }
+
+    const normalizedKeys = Array.from(
+      new Set((input.orderCodeCandidates || []).map(normalizeOrderCodeKey).filter(Boolean))
+    );
+
+    let matchedOrder: RowDataPacket | null = null;
+    if (normalizedKeys.length > 0) {
+      const placeholders = normalizedKeys.map(() => "?").join(", ");
+      const [orderRows] = await conn.query<RowDataPacket[]>(
+        `SELECT * FROM orders
+         WHERE REPLACE(REPLACE(UPPER(order_code), '-', ''), ' ', '') IN (${placeholders})
+         ORDER BY created_at DESC
+         LIMIT 1
+         FOR UPDATE`,
+        normalizedKeys
+      );
+      matchedOrder = orderRows[0] || null;
+    }
+
+    if (!matchedOrder || String(matchedOrder.status) === "CANCELLED") {
+      await conn.query(
+        `INSERT INTO bank_transactions
+         (sepay_id, gateway, transaction_date, account_number, transfer_type, transfer_amount, content, reference_code, matched_order_code, status, raw_payload)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, 'UNMATCHED', ?)`,
+        [
+          input.sepayId,
+          input.gateway,
+          input.transactionDate,
+          input.accountNumber,
+          input.transferType,
+          input.transferAmount,
+          input.content,
+          input.referenceCode,
+          rawPayloadStr,
+        ]
+      );
+      await conn.commit();
+      return { outcome: "UNMATCHED", orderId: null, orderCode: null };
+    }
+
+    const orderId = String(matchedOrder.id);
+    const orderCode = String(matchedOrder.order_code);
+    const totalAmount = Number(matchedOrder.total_amount || 0);
+    const currentPaid = Number(matchedOrder.paid_amount || 0);
+
+    if (isOrderPaidStatus(matchedOrder.payment_status)) {
+      await conn.query(
+        `INSERT INTO bank_transactions
+         (sepay_id, gateway, transaction_date, account_number, transfer_type, transfer_amount, content, reference_code, matched_order_code, status, raw_payload)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'DUPLICATE', ?)`,
+        [
+          input.sepayId,
+          input.gateway,
+          input.transactionDate,
+          input.accountNumber,
+          input.transferType,
+          input.transferAmount,
+          input.content,
+          input.referenceCode,
+          orderCode,
+          rawPayloadStr,
+        ]
+      );
+      await conn.commit();
+      return {
+        outcome: "DUPLICATE",
+        orderId,
+        orderCode,
+        paidAmount: currentPaid || totalAmount,
+        totalAmount,
+      };
+    }
+
+    const newPaidAmount = currentPaid + Number(input.transferAmount || 0);
+    const note = `${input.gateway} #${input.sepayId}: +${Number(input.transferAmount || 0).toLocaleString("vi-VN")}đ`;
+
+    if (newPaidAmount >= totalAmount) {
+      await conn.query(
+        `UPDATE orders
+         SET payment_status = 'PAID',
+             paid_amount = ?,
+             paid_at = NOW(),
+             status = CASE WHEN status = 'PENDING_PAYMENT' THEN 'CONFIRMED' ELSE status END,
+             payment_note = ?,
+             updated_at = NOW()
+         WHERE id = ?`,
+        [newPaidAmount, note, orderId]
+      );
+      await conn.query(
+        `INSERT INTO bank_transactions
+         (sepay_id, gateway, transaction_date, account_number, transfer_type, transfer_amount, content, reference_code, matched_order_code, status, raw_payload)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'MATCHED', ?)`,
+        [
+          input.sepayId,
+          input.gateway,
+          input.transactionDate,
+          input.accountNumber,
+          input.transferType,
+          input.transferAmount,
+          input.content,
+          input.referenceCode,
+          orderCode,
+          rawPayloadStr,
+        ]
+      );
+      await conn.commit();
+      return {
+        outcome: "MATCHED",
+        orderId,
+        orderCode,
+        paidAmount: newPaidAmount,
+        totalAmount,
+      };
+    }
+
+    const shortfall = Math.max(0, totalAmount - newPaidAmount);
+    await conn.query(
+      `UPDATE orders
+       SET payment_status = 'PARTIAL',
+           paid_amount = ?,
+           payment_note = ?,
+           updated_at = NOW()
+       WHERE id = ?`,
+      [newPaidAmount, note, orderId]
+    );
+    await conn.query(
+      `INSERT INTO bank_transactions
+       (sepay_id, gateway, transaction_date, account_number, transfer_type, transfer_amount, content, reference_code, matched_order_code, status, raw_payload)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'UNDERPAID', ?)`,
+      [
+        input.sepayId,
+        input.gateway,
+        input.transactionDate,
+        input.accountNumber,
+        input.transferType,
+        input.transferAmount,
+        input.content,
+        input.referenceCode,
+        orderCode,
+        rawPayloadStr,
+      ]
+    );
+    await conn.commit();
+    return {
+      outcome: "UNDERPAID",
+      orderId,
+      orderCode,
+      paidAmount: newPaidAmount,
+      totalAmount,
+      shortfall,
+    };
+  } catch (err: any) {
+    try {
+      await conn.rollback();
+    } catch {}
+    if (err?.code === "ER_DUP_ENTRY") {
+      return { outcome: "DUPLICATE", orderId: null, orderCode: null };
+    }
+    throw err;
+  } finally {
+    conn.release();
+  }
+}
+
+export async function assignBankTransactionToOrderInMySql(input: {
+  bankTransactionId: number;
+  orderIdOrCode: string;
+  staffUsername: string;
+  staffFullName?: string;
+}): Promise<
+  | { ok: false; message: string; statusCode?: number }
+  | {
+      ok: true;
+      sepayId: string;
+      orderId: string;
+      orderCode: string;
+      transferAmount: number;
+      paidAmount: number;
+      totalAmount: number;
+      txStatus: "MATCHED" | "UNDERPAID";
+      paymentStatus: "PAID" | "PARTIAL";
+    }
+> {
+  const currentPool = await ensureMySqlInitialized();
+  const conn = await currentPool.getConnection();
+
+  try {
+    await conn.beginTransaction();
+
+    const [txRows] = await conn.query<RowDataPacket[]>(
+      `SELECT * FROM bank_transactions WHERE id = ? LIMIT 1 FOR UPDATE`,
+      [input.bankTransactionId]
+    );
+    const tx = txRows[0];
+    if (!tx) {
+      await conn.rollback();
+      return { ok: false, message: "Không tìm thấy giao dịch ngân hàng.", statusCode: 404 };
+    }
+    if (String(tx.status) !== "UNMATCHED") {
+      await conn.rollback();
+      return { ok: false, message: "Giao dịch này đã được đối soát trước đó.", statusCode: 409 };
+    }
+
+    const normalizedCode = normalizeOrderCodeKey(input.orderIdOrCode);
+    const [orderRows] = await conn.query<RowDataPacket[]>(
+      `SELECT * FROM orders
+       WHERE id = ?
+          OR LOWER(order_code) = LOWER(?)
+          OR REPLACE(REPLACE(UPPER(order_code), '-', ''), ' ', '') = ?
+       LIMIT 1
+       FOR UPDATE`,
+      [input.orderIdOrCode, input.orderIdOrCode, normalizedCode]
+    );
+    const order = orderRows[0];
+    if (!order) {
+      await conn.rollback();
+      return { ok: false, message: "Không tìm thấy đơn hàng cần gán.", statusCode: 404 };
+    }
+    if (String(order.status) === "CANCELLED") {
+      await conn.rollback();
+      return { ok: false, message: "Không thể gán giao dịch vào đơn hàng đã hủy.", statusCode: 400 };
+    }
+    if (isOrderPaidStatus(order.payment_status)) {
+      await conn.rollback();
+      return { ok: false, message: "Đơn hàng này đã được thanh toán đủ trước đó.", statusCode: 400 };
+    }
+
+    const sepayId = String(tx.sepay_id);
+    const orderId = String(order.id);
+    const orderCode = String(order.order_code);
+    const transferAmount = Number(tx.transfer_amount || 0);
+    const totalAmount = Number(order.total_amount || 0);
+    const paidAmount = Number(order.paid_amount || 0) + transferAmount;
+    const isFull = paidAmount >= totalAmount;
+
+    const paymentStatus: "PAID" | "PARTIAL" = isFull ? "PAID" : "PARTIAL";
+    const txStatus: "MATCHED" | "UNDERPAID" = isFull ? "MATCHED" : "UNDERPAID";
+    const actor = input.staffFullName ? `${input.staffFullName} (${input.staffUsername})` : input.staffUsername;
+    const note = `Gán tay bởi ${actor} - GD #${sepayId}: +${transferAmount.toLocaleString("vi-VN")}đ`;
+
+    await conn.query(
+      `UPDATE orders
+       SET payment_status = ?,
+           paid_amount = ?,
+           paid_at = CASE WHEN ? = 1 THEN COALESCE(paid_at, NOW()) ELSE paid_at END,
+           status = CASE WHEN ? = 1 AND status = 'PENDING_PAYMENT' THEN 'CONFIRMED' ELSE status END,
+           payment_note = ?,
+           updated_at = NOW()
+       WHERE id = ?`,
+      [paymentStatus, paidAmount, isFull ? 1 : 0, isFull ? 1 : 0, note, orderId]
+    );
+
+    await conn.query(
+      `UPDATE bank_transactions
+       SET matched_order_code = ?, status = ?, updated_at = NOW()
+       WHERE id = ?`,
+      [orderCode, txStatus, input.bankTransactionId]
+    );
+
+    await conn.commit();
+    return {
+      ok: true,
+      sepayId,
+      orderId,
+      orderCode,
+      transferAmount,
+      paidAmount,
+      totalAmount,
+      txStatus,
+      paymentStatus,
+    };
+  } catch (err) {
+    try {
+      await conn.rollback();
+    } catch {}
+    throw err;
+  } finally {
+    conn.release();
   }
 }

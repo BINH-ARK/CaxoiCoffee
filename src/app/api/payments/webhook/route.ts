@@ -61,7 +61,7 @@ export async function POST(request: Request) {
 
     const payload = await request.json();
 
-    // Hỗ trợ payload từ SePay, PayOS và cổng ngân hàng chuẩn
+    // Hỗ trợ payload từ payOS và cổng ngân hàng chuẩn
     const content = String(payload.content || payload.description || payload.orderCode || "").trim();
     const transferAmount = Number(payload.transferAmount ?? payload.amount);
     const gateway = String(payload.gateway || "VIETQR").slice(0, 40);

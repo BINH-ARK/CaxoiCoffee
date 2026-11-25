@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { signAuthToken, COOKIE_NAME } from "@/lib/auth";
 import { ensureMySqlInitialized, findUserInMySql, recordAuditLogInMySql } from "@/lib/mysql";
 import { verifyPassword } from "@/lib/password";
-import { getTrustedClientIp } from "@/lib/serverAuth";
+import { getTrustedClientIp, verifySameOriginCsrf } from "@/lib/serverAuth";
 import {
   checkRateLimitLock,
   consumeRateLimit,
@@ -15,6 +15,9 @@ const LOCK_DURATION_MS = 1000 * 60 * 3; // 3 phút
 const WINDOW_MS = 1000 * 60 * 15; // 15 phút
 
 export async function POST(request: Request) {
+  const csrfError = verifySameOriginCsrf(request);
+  if (csrfError) return csrfError;
+
   try {
     const ip = getTrustedClientIp(request);
 

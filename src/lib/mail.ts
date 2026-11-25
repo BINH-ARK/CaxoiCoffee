@@ -2,6 +2,7 @@ import nodemailer from "nodemailer";
 import { Order } from "@/types";
 import { getNotificationStaffEmails } from "@/lib/mysql";
 import { escapeHtml, getTelHref } from "@/lib/utils";
+import { isOrderPaidStatus } from "@/lib/paymentStatus";
 
 function getTrustedBaseUrl(): string {
   const configured = (process.env.APP_PUBLIC_URL || process.env.NEXT_PUBLIC_SITE_URL || "").trim();
@@ -87,15 +88,16 @@ export function generateOrderEmailHtml(order: Order): string {
   const typeBg = isTakeaway ? "#E0F2FE" : isGroupOrder ? "#FCE7F3" : "#FEF3C7";
   const typeColor = isTakeaway ? "#0369A1" : isGroupOrder ? "#9D174D" : "#92400E";
 
+  const isPaid = isOrderPaidStatus(order.paymentStatus);
   const paymentText =
     order.paymentMethod === "VIETQR_BANKING"
-      ? order.paymentStatus === "PAID"
+      ? isPaid
         ? "✅ ĐÃ THANH TOÁN (VietQR Banking)"
         : "⏳ CHỜ QUÉT MÃ VIETQR (Chưa nhận tiền)"
       : "💵 TIỀN MẶT KHI NHẬN HÀNG (COD)";
 
-  const paymentBg = order.paymentStatus === "PAID" ? "#D1FAE5" : "#FEF9C3";
-  const paymentColor = order.paymentStatus === "PAID" ? "#065F46" : "#854D0E";
+  const paymentBg = isPaid ? "#D1FAE5" : "#FEF9C3";
+  const paymentColor = isPaid ? "#065F46" : "#854D0E";
 
   const kdsUrl = `${baseUrl}/kds`;
   const adminUrl = `${baseUrl}/admin`;
@@ -374,10 +376,9 @@ export async function sendOrderNotificationEmail(
     const fromAddress = process.env.SMTP_FROM || `"Cà Xòi Coffee ☕" <${process.env.SMTP_USER}>`;
     const cleanCode = stripHeaderNewlines(order.orderCode);
     const cleanName = stripHeaderNewlines(order.recipientName);
-    const subject =
-      order.paymentStatus === "PAID"
-        ? `☕ [ĐÃ THANH TOÁN] Đơn hàng #${cleanCode} từ ${cleanName} (${formatCurrency(order.totalAmount)})`
-        : `🔔 [ĐƠN MỚI] Đơn hàng #${cleanCode} từ ${cleanName} - ${order.orderType === "TAKEAWAY" ? "Khách lấy mang đi" : "Giao văn phòng"}`;
+    const subject = isOrderPaidStatus(order.paymentStatus)
+      ? `☕ [ĐÃ THANH TOÁN] Đơn hàng #${cleanCode} từ ${cleanName} (${formatCurrency(order.totalAmount)})`
+      : `🔔 [ĐƠN MỚI] Đơn hàng #${cleanCode} từ ${cleanName} - ${order.orderType === "TAKEAWAY" ? "Khách lấy mang đi" : "Giao văn phòng"}`;
 
     const htmlContent = generateOrderEmailHtml(order);
 

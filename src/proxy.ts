@@ -47,7 +47,7 @@ function checkEdgeCsrf(request: NextRequest): NextResponse | null {
   return null;
 }
 
-export async function middleware(request: NextRequest) {
+export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   if (pathname === "/admin/login") {
@@ -97,8 +97,15 @@ export async function middleware(request: NextRequest) {
     const { payload } = await jwtVerify(token, secretKey);
     const role = String(payload.role || "");
 
+    const isCashierBankTxApi =
+      pathname === "/api/admin/bank-transactions" ||
+      pathname.startsWith("/api/admin/bank-transactions/");
+
     if (isAdminRoute || isAdminApiRoute) {
-      if (role !== "SUPER_ADMIN" && role !== "STORE_MANAGER") {
+      const allowedAdminRoles = isCashierBankTxApi
+        ? ["SUPER_ADMIN", "STORE_MANAGER", "CASHIER"]
+        : ["SUPER_ADMIN", "STORE_MANAGER"];
+      if (!allowedAdminRoles.includes(role)) {
         if (isAdminApiRoute) {
           return NextResponse.json(
             { success: false, message: "Forbidden. Bạn không có quyền quản trị." },

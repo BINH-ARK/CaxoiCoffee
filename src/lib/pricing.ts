@@ -11,8 +11,16 @@ export interface AuthoritativeResolvedItem {
   notes?: string;
 }
 
+const LEGACY_PRODUCT_ID_MAP: Record<string, string> = {
+  p1: "b0000000-0000-0000-0000-000000000001",
+  p2: "b0000000-0000-0000-0000-000000000002",
+  p3: "b0000000-0000-0000-0000-000000000003",
+  p4: "b0000000-0000-0000-0000-000000000004",
+  p5: "b0000000-0000-0000-0000-000000000005",
+};
+
 /**
- * Tra cứu và tính lại toàn bộ giá món, size và topping trực tiếp từ CSDL SQLite.
+ * Tra cứu và tính lại toàn bộ giá món, size và topping trực tiếp từ CSDL MySQL.
  * Tuyệt đối không tin unitPrice, totalPrice hoặc extraPrice do trình duyệt gửi lên.
  */
 export function resolveCartItemFromCatalog(
@@ -25,7 +33,16 @@ export function resolveCartItemFromCatalog(
     return { ok: false, message: "Thiếu mã sản phẩm hợp lệ trong giỏ hàng." };
   }
 
-  const product = catalogProducts.find((p) => p.id === productId);
+  const mappedLegacyId = LEGACY_PRODUCT_ID_MAP[productId.trim().toLowerCase()];
+  const reqSlug = String(rawItem?.product?.slug || "").trim().toLowerCase();
+  const reqName = String(rawItem?.product?.name || "").trim().toLowerCase();
+
+  const product =
+    catalogProducts.find((p) => p.id === productId) ||
+    (mappedLegacyId ? catalogProducts.find((p) => p.id === mappedLegacyId) : undefined) ||
+    (reqSlug ? catalogProducts.find((p) => p.slug.trim().toLowerCase() === reqSlug) : undefined) ||
+    (reqName ? catalogProducts.find((p) => p.name.trim().toLowerCase() === reqName) : undefined);
+
   if (!product) {
     return { ok: false, message: `Sản phẩm (${productId}) không còn tồn tại trong thực đơn.` };
   }

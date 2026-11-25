@@ -165,42 +165,12 @@ export const INITIAL_ROLE_PERMISSIONS: RolePermissionConfig[] = [
 
 export const INITIAL_STAFF_ACCOUNTS: StaffAccount[] = [
   {
-    id: "staff-1",
-    username: "admin",
-    fullName: "Nguyễn Hoàng Nam (Chủ quán)",
+    id: "a0000000-0000-0000-0000-000000000001",
+    username: "quynhnhu",
+    fullName: "Quản Trị Viên (Chủ Quán)",
     role: "SUPER_ADMIN",
-    phone: "0901234567",
     isActive: true,
     createdAt: "2026-10-01T08:00:00.000Z",
-  },
-  {
-    id: "staff-2",
-    username: "manager",
-    fullName: "Lê Cửa Hàng Trưởng",
-    role: "STORE_MANAGER",
-    phone: "0912345678",
-    isActive: true,
-    createdAt: "2026-10-05T08:00:00.000Z",
-  },
-  {
-    id: "staff-3",
-    username: "barista1",
-    fullName: "Trần Văn Barista",
-    role: "BARISTA",
-    phone: "0934567890",
-    pin: "8823",
-    isActive: true,
-    createdAt: "2026-10-10T08:00:00.000Z",
-  },
-  {
-    id: "staff-4",
-    username: "cashier1",
-    fullName: "Phạm Thu Ngân",
-    role: "CASHIER",
-    phone: "0945678901",
-    pin: "6688",
-    isActive: true,
-    createdAt: "2026-10-12T08:00:00.000Z",
   },
 ];
 

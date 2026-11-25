@@ -5,34 +5,21 @@ import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  LayoutDashboard,
-  Coffee,
-  Shield,
-  Settings,
   MonitorPlay,
   LogOut,
   ExternalLink,
   UserCheck,
-  Building,
-  Key,
-  Database,
-  TrendingUp,
-  Tag,
-  Truck,
+  Menu,
 } from "lucide-react";
 
 interface AdminManagementHeaderProps {
   currentUser?: any;
-  activeTab?: "DASHBOARD" | "MENU" | "RBAC" | "SETTINGS" | "DATABASE" | "PROMOTIONS" | "ORDERS";
-  onTabChange?: (tab: "DASHBOARD" | "MENU" | "RBAC" | "SETTINGS" | "DATABASE" | "PROMOTIONS" | "ORDERS") => void;
-  productCount?: number;
+  onOpenMobileMenu?: () => void;
 }
 
 export default function AdminManagementHeader({
   currentUser: propUser,
-  activeTab,
-  onTabChange,
-  productCount = 5,
+  onOpenMobileMenu,
 }: AdminManagementHeaderProps) {
   const router = useRouter();
   const pathname = usePathname();
@@ -82,11 +69,21 @@ export default function AdminManagementHeader({
   const roleInfo = getRoleLabel(user?.role);
 
   return (
-    <header className="sticky top-0 z-40 bg-[#160B07] text-white border-b border-pink-900/30 shadow-md">
-      {/* TIER 1: GLOBAL BRANDING & USER PROFILE ACTIONS (ALWAYS SINGLE ROW, NEVER WRAPPING) */}
-      <div className="max-w-7xl mx-auto px-4 py-2.5 flex items-center justify-between gap-3">
-        {/* Left: Brand Identity */}
-        <div className="flex items-center gap-3 shrink-0">
+    <header className="sticky top-0 z-40 h-16 bg-[#160B07] text-white border-b border-pink-900/30 shadow-md flex items-center">
+      <div className="w-full px-4 flex items-center justify-between gap-3">
+        {/* Left: Mobile Sidebar Toggle + Brand Identity */}
+        <div className="flex items-center gap-2.5 shrink-0">
+          {onOpenMobileMenu && (
+            <button
+              type="button"
+              onClick={onOpenMobileMenu}
+              className="lg:hidden inline-flex items-center justify-center w-9 h-9 rounded-xl bg-white/10 hover:bg-white/20 text-pink-200 border border-white/10 transition-colors"
+              title="Mở menu quản trị"
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+          )}
+
           <Link href="/admin" className="flex items-center gap-2.5 group">
             <div className="w-10 h-10 rounded-xl overflow-hidden border border-pink-400/40 bg-[#FFD1E3] shrink-0 group-hover:scale-105 transition-transform shadow-sm">
               <Image
@@ -117,7 +114,6 @@ export default function AdminManagementHeader({
 
         {/* Right: User Tools & Navigation Shortcuts */}
         <div className="flex items-center gap-2 shrink-0">
-          {/* Link to Customer Store */}
           <Link
             href="/"
             target="_blank"
@@ -128,7 +124,6 @@ export default function AdminManagementHeader({
             <ExternalLink className="w-3.5 h-3.5 text-pink-300" />
           </Link>
 
-          {/* KDS Barista Link */}
           <Link
             href="/kds"
             className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all border shadow-sm ${
@@ -142,9 +137,8 @@ export default function AdminManagementHeader({
             <span className="hidden sm:inline">Barista KDS</span>
           </Link>
 
-          {/* Logged in User Badge */}
           {user && (
-            <div className="flex items-center gap-2 bg-white/10 px-3 py-1 rounded-xl border border-white/10">
+            <div className="hidden sm:flex items-center gap-2 bg-white/10 px-3 py-1 rounded-xl border border-white/10">
               <UserCheck className="w-3.5 h-3.5 text-amber-300 shrink-0" />
               <div className="text-left text-xs leading-tight">
                 <span className="font-bold text-white block truncate max-w-[130px]">
@@ -157,7 +151,6 @@ export default function AdminManagementHeader({
             </div>
           )}
 
-          {/* Log Out Button */}
           <button
             type="button"
             onClick={handleLogout}
@@ -169,115 +162,6 @@ export default function AdminManagementHeader({
           </button>
         </div>
       </div>
-
-      {/* TIER 2: PRIMARY NAVIGATION TABS (DEDICATED FULL-WIDTH BAR WITH NO CROWDING) */}
-      {pathname === "/admin" && onTabChange && (
-        <div className="border-t border-white/10 bg-[#200F0A]/95 backdrop-blur-sm">
-          <div className="max-w-7xl mx-auto px-4 flex items-center gap-1.5 sm:gap-2 overflow-x-auto py-2">
-            {/* 1. TỔNG QUAN & DOANH THU */}
-            <button
-              type="button"
-              onClick={() => onTabChange("DASHBOARD")}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
-                activeTab === "DASHBOARD"
-                  ? "bg-blue-600 text-white shadow-md ring-2 ring-blue-400/40"
-                  : "text-stone-300 hover:text-white hover:bg-white/10"
-              }`}
-            >
-              <TrendingUp className="w-4 h-4 text-blue-400" />
-              <span>Doanh thu & Tổng quan</span>
-            </button>
-
-            {/* 2. ĐƠN HÀNG & VẬN CHUYỂN */}
-            <button
-              type="button"
-              onClick={() => onTabChange("ORDERS")}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
-                activeTab === "ORDERS"
-                  ? "bg-orange-600 text-white shadow-md ring-2 ring-orange-400/40"
-                  : "text-stone-300 hover:text-white hover:bg-white/10"
-              }`}
-            >
-              <Truck className="w-4 h-4 text-orange-400" />
-              <span>Đơn hàng & Vận chuyển</span>
-            </button>
-
-            {/* 3. THỰC ĐƠN */}
-            <button
-              type="button"
-              onClick={() => onTabChange("MENU")}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
-                activeTab === "MENU"
-                  ? "bg-caramel text-white shadow-md ring-2 ring-caramel/40"
-                  : "text-stone-300 hover:text-white hover:bg-white/10"
-              }`}
-            >
-              <Coffee className="w-4 h-4 text-amber-300" />
-              <span>Thực đơn ({productCount} món)</span>
-            </button>
-
-            {/* 4. KHUYẾN MÃI */}
-            <button
-              type="button"
-              onClick={() => onTabChange("PROMOTIONS")}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
-                activeTab === "PROMOTIONS"
-                  ? "bg-pink-600 text-white shadow-md ring-2 ring-pink-400/40"
-                  : "text-stone-300 hover:text-white hover:bg-white/10"
-              }`}
-            >
-              <Tag className="w-4 h-4 text-pink-400" />
-              <span>Khuyến mãi</span>
-            </button>
-
-            {/* PHÂN CÁCH NHÓM BÁN HÀNG VÀ NHÓM HỆ THỐNG */}
-            <div className="h-4 w-px bg-white/20 mx-1 shrink-0 hidden sm:block" />
-
-            {/* 5. PHÂN QUYỀN */}
-            <button
-              type="button"
-              onClick={() => onTabChange("RBAC")}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
-                activeTab === "RBAC"
-                  ? "bg-caramel text-white shadow-md ring-2 ring-caramel/40"
-                  : "text-stone-300 hover:text-white hover:bg-white/10"
-              }`}
-            >
-              <Shield className="w-4 h-4 text-amber-400" />
-              <span>Phân quyền (RBAC)</span>
-            </button>
-
-            {/* 6. VẬN HÀNH & NGÂN HÀNG */}
-            <button
-              type="button"
-              onClick={() => onTabChange("SETTINGS")}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
-                activeTab === "SETTINGS"
-                  ? "bg-caramel text-white shadow-md ring-2 ring-caramel/40"
-                  : "text-stone-300 hover:text-white hover:bg-white/10"
-              }`}
-            >
-              <Settings className="w-4 h-4 text-stone-300" />
-              <span>Cài đặt Quán & Trang chủ</span>
-            </button>
-
-            {/* 7. SAO LƯU & CSDL */}
-            <button
-              type="button"
-              onClick={() => onTabChange("DATABASE")}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all shrink-0 ${
-                activeTab === "DATABASE"
-                  ? "bg-emerald-600 text-white shadow-md ring-2 ring-emerald-400/40"
-                  : "text-stone-300 hover:text-white hover:bg-white/10"
-              }`}
-              title="Sao lưu, Nhập dữ liệu & Quản trị CSDL SQLite"
-            >
-              <Database className="w-4 h-4 text-emerald-400" />
-              <span>Sao Lưu & CSDL</span>
-            </button>
-          </div>
-        </div>
-      )}
     </header>
   );
 }

@@ -14,6 +14,8 @@ import {
 import { safeEqualStrings } from "@/lib/password";
 import { maskAddress, maskPersonName, maskPhone } from "@/lib/utils";
 import { consumeRateLimit, createRateLimitResponse } from "@/lib/rateLimit";
+import { isOrderPaidStatus } from "@/lib/paymentStatus";
+import { syncOrderPaymentWithPayOs } from "@/lib/payosSync";
 import { Order } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -27,7 +29,14 @@ const ALLOWED_STATUSES = new Set([
   "COMPLETED",
   "CANCELLED",
 ]);
-const ALLOWED_PAYMENT_STATUSES = new Set(["UNPAID", "PAID", "REFUNDED"]);
+const ALLOWED_PAYMENT_STATUSES = new Set([
+  "UNPAID",
+  "PENDING",
+  "PARTIAL",
+  "PAID",
+  "MANUAL_PAID",
+  "REFUNDED",
+]);
 
 function extractOrderProof(request: Request): { token: string; phone: string } {
   const { searchParams } = new URL(request.url);
@@ -52,13 +61,28 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   const { id } = await params;
-  const order = await getOrderByIdFromMySql(id);
+  let order = await getOrderByIdFromMySql(id);
 
   if (!order) {
     return NextResponse.json(
       { success: false, message: "Không tìm thấy đơn hàng" },
       { status: 404 }
     );
+  }
+
+  if (
+    order.paymentMethod === "VIETQR_BANKING" &&
+    order.status !== "CANCELLED" &&
+    !isOrderPaidStatus(order.paymentStatus)
+  ) {
+    try {
+      const syncRes = await syncOrderPaymentWithPayOs(order, {
+        ipAddress: getTrustedClientIp(request),
+      });
+      order = syncRes.order;
+    } catch (syncErr) {
+      console.warn("[Orders GET] payOS active sync warning:", syncErr);
+    }
   }
 
   const staff = await getAuthenticatedStaff(request);
@@ -168,7 +192,7 @@ export async function PATCH(
 
   // Nếu xác nhận đã thanh toán khi đơn đang chờ thanh toán, tự động chuyển sang CONFIRMED (trừ khi đã gửi status khác)
   const effectiveStatus =
-    body.paymentStatus === "PAID" && currentOrder.status === "PENDING_PAYMENT" && !body.status
+    isOrderPaidStatus(body.paymentStatus) && currentOrder.status === "PENDING_PAYMENT" && !body.status
       ? "CONFIRMED"
       : targetStatus;
 
@@ -294,7 +318,7 @@ export async function DELETE(
       );
     }
 
-    if (currentOrder.status !== "PENDING_PAYMENT" || currentOrder.paymentStatus === "PAID") {
+    if (currentOrder.status !== "PENDING_PAYMENT" || isOrderPaidStatus(currentOrder.paymentStatus)) {
       return NextResponse.json(
         {
           success: false,

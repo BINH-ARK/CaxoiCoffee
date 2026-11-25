@@ -935,15 +935,12 @@ export default function OperatingAndVietQrSettings({
               </p>
               <ul className="text-[11px] text-coffee-700 space-y-1 pl-3 list-disc">
                 <li>
-                  <strong>Webhook ngân hàng thật (SePay / Casso):</strong> Trỏ endpoint{" "}
+                  <strong>Webhook thanh toán tự động (payOS):</strong> Trỏ endpoint{" "}
                   <code className="bg-stone-100 px-1 py-0.5 rounded font-mono text-[10px] text-coffee-900">
-                    POST /api/payments/webhook
+                    POST /api/webhooks/payos
                   </code>{" "}
-                  kèm header{" "}
-                  <code className="bg-stone-100 px-1 py-0.5 rounded font-mono text-[10px] text-coffee-900">
-                    Authorization: Bearer &lt;WEBHOOK_SECRET_KEY&gt;
-                  </code>{" "}
-                  (cấu hình trong tệp <code className="font-mono text-[10px]">.env</code>).
+                  xác thực chữ ký <code className="font-mono text-[10px]">HMAC-SHA256</code> (cấu hình trực tiếp tại tab{" "}
+                  <strong>Thanh toán &amp; payOS</strong>).
                 </li>
                 <li>
                   <strong>Thu ngân / Quản lý xác nhận thủ công:</strong> Kiểm tra biến động số dư và bấm xác nhận trực tiếp tại tab{" "}

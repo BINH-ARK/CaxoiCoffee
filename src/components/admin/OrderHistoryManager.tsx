@@ -28,6 +28,7 @@ import {
   X,
 } from "lucide-react";
 import { Order, OrderStatus, OrderItemRecord } from "@/types";
+import { isOrderPaidStatus } from "@/lib/paymentStatus";
 import { formatVND } from "@/lib/utils";
 import CupStickerPreview from "@/components/CupStickerPreview";
 
@@ -208,7 +209,7 @@ export default function OrderHistoryManager({ currentUser }: OrderHistoryManager
 
   // Toggle Payment status
   const handleTogglePayment = async (order: Order) => {
-    const nextPaymentStatus = order.paymentStatus === "PAID" ? "UNPAID" : "PAID";
+    const nextPaymentStatus = isOrderPaidStatus(order.paymentStatus) ? "PENDING" : "MANUAL_PAID";
     try {
       const res = await fetch(`/api/orders/${order.id}`, {
         method: "PATCH",
@@ -217,7 +218,9 @@ export default function OrderHistoryManager({ currentUser }: OrderHistoryManager
       });
       const data = await res.json();
       if (data.success) {
-        showToast(`Đã đổi thanh toán: ${nextPaymentStatus === "PAID" ? "ĐÃ THANH TOÁN" : "CHƯA THANH TOÁN"}`);
+        showToast(
+          `Đã đổi thanh toán: ${isOrderPaidStatus(nextPaymentStatus) ? "ĐÃ THANH TOÁN" : "CHƯA THANH TOÁN"}`
+        );
         fetchOrders(true);
       } else {
         showToast(data.message || "Không thể đổi trạng thái thanh toán", "error");
@@ -581,14 +584,14 @@ export default function OrderHistoryManager({ currentUser }: OrderHistoryManager
                     <button
                       onClick={() => handleTogglePayment(order)}
                       className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition-all ${
-                        order.paymentStatus === "PAID"
+                        isOrderPaidStatus(order.paymentStatus)
                           ? "bg-emerald-50 border-emerald-300 text-emerald-800"
                           : "bg-amber-50 border-amber-300 text-amber-900"
                       }`}
                       title="Nhấn để xác nhận / đổi trạng thái thanh toán"
                     >
                       {order.paymentMethod === "VIETQR_BANKING" ? "VietQR: " : "Tiền mặt: "}
-                      {order.paymentStatus === "PAID" ? "Đã thanh toán" : "Chưa thanh toán"}
+                      {isOrderPaidStatus(order.paymentStatus) ? "Đã thanh toán" : "Chưa thanh toán"}
                     </button>
 
                     {/* Status Badge */}

@@ -59,16 +59,38 @@ import {
 } from "@/types";
 import OperatingAndVietQrSettings from "@/components/admin/OperatingAndVietQrSettings";
 import AdminManagementHeader from "@/components/admin/AdminManagementHeader";
+import AdminSidebar, { AdminTabKey } from "@/components/admin/AdminSidebar";
 import DatabaseManager from "@/components/admin/DatabaseManager";
 import PromotionManager from "@/components/admin/PromotionManager";
 import OrderHistoryManager from "@/components/admin/OrderHistoryManager";
 import DashboardOverviewManager from "@/components/admin/DashboardOverviewManager";
 import AuditLogPanel from "@/components/admin/AuditLogPanel";
+import PayOsConfigManager from "@/components/admin/PayOsConfigManager";
+import BankTransactionsManager from "@/components/admin/BankTransactionsManager";
 
 export default function AdminPage() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<"DASHBOARD" | "MENU" | "RBAC" | "SETTINGS" | "DATABASE" | "PROMOTIONS" | "ORDERS">("DASHBOARD");
+  const [activeTab, setActiveTab] = useState<AdminTabKey>("DASHBOARD");
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("caxoi_admin_sidebar_collapsed");
+      if (saved === "1") setIsSidebarCollapsed(true);
+    } catch {}
+  }, []);
+
+  const handleToggleSidebar = () => {
+    setIsSidebarCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("caxoi_admin_sidebar_collapsed", next ? "1" : "0");
+      } catch {}
+      return next;
+    });
+  };
 
   // Core Data
   const [stats, setStats] = useState<any>(null);
@@ -249,6 +271,8 @@ export default function AdminPage() {
       const tab = params.get("tab")?.toUpperCase();
       if (tab === "DATABASE" || tab === "BACKUP" || tab === "CSDL") {
         setActiveTab("DATABASE");
+      } else if (tab === "PAYOS" || tab === "PAYMENTS" || tab === "WEBHOOK") {
+        setActiveTab("PAYOS");
       } else if (tab && ["DASHBOARD", "MENU", "RBAC", "SETTINGS", "PROMOTIONS", "ORDERS"].includes(tab)) {
         setActiveTab(tab as any);
       }
@@ -1049,16 +1073,28 @@ export default function AdminPage() {
   });
 
   return (
-    <div className="min-h-screen bg-[#FDFBF7]">
+    <div className="min-h-screen -mb-20 bg-[#FDFBF7]">
       {/* 1. DEDICATED ADMIN MANAGEMENT HEADER */}
       <AdminManagementHeader
         currentUser={currentUser}
-        activeTab={activeTab}
-        onTabChange={(tab) => setActiveTab(tab)}
-        productCount={products.length}
+        onOpenMobileMenu={() => setIsMobileSidebarOpen(true)}
       />
 
-      <div className="max-w-6xl mx-auto px-4 py-4 space-y-5">
+      <div className="flex min-h-[calc(100vh-4rem)]">
+        {/* 2. COLLAPSIBLE VERTICAL ADMIN SIDEBAR */}
+        <AdminSidebar
+          activeTab={activeTab}
+          onTabChange={(tab) => setActiveTab(tab)}
+          productCount={products.length}
+          isCollapsed={isSidebarCollapsed}
+          onToggleCollapse={handleToggleSidebar}
+          isMobileOpen={isMobileSidebarOpen}
+          onCloseMobile={() => setIsMobileSidebarOpen(false)}
+        />
+
+        {/* 3. MAIN ADMIN WORKSPACE */}
+        <main className="flex-1 min-w-0">
+          <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 space-y-5">
         {/* Subheader: Store Operation Emergency Toggles */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-white p-3.5 rounded-2xl border border-coffee-100 shadow-sm">
           <div className="flex items-center gap-2">
@@ -2366,6 +2402,16 @@ export default function AdminPage() {
       )}
 
       {/* ======================================================================= */}
+      {/* TAB 8: CẤU HÌNH PAYOS WEBHOOK & ĐỐI SOÁT GIAO DỊCH NGÂN HÀNG */}
+      {/* ======================================================================= */}
+      {activeTab === "PAYOS" && (
+        <div className="space-y-6 animate-fade-in">
+          <PayOsConfigManager currentUser={currentUser} />
+          <BankTransactionsManager />
+        </div>
+      )}
+
+      {/* ======================================================================= */}
       {/* MODAL: CHỈNH SỬA MÓN (TÊN, GIÁ, KÍCH CỠ & TRẠNG THÁI) */}
       {/* ======================================================================= */}
       {isEditProductOpen && (
@@ -3186,6 +3232,8 @@ export default function AdminPage() {
           </div>
         </div>
       )}
+          </div>
+        </main>
       </div>
     </div>
   );

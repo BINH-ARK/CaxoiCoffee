@@ -65,7 +65,7 @@ export const INITIAL_OPTIONS: ProductOption[] = [
 
 export const INITIAL_PRODUCTS: Product[] = [
   {
-    id: "p1",
+    id: "b0000000-0000-0000-0000-000000000001",
     categoryId: 1,
     name: "Cà hê đen",
     slug: "ca-he-den",
@@ -77,13 +77,13 @@ export const INITIAL_PRODUCTS: Product[] = [
     prepTimeMinutes: 3,
     tags: ["BEST_SELLER", "SIGNATURE"],
     variants: [
-      { id: 101, productId: "p1", sizeName: "Ly", extraPrice: 0, isDefault: true },
-      { id: 102, productId: "p1", sizeName: "100ml", extraPrice: 12000, isDefault: false },
-      { id: 103, productId: "p1", sizeName: "250ml", extraPrice: 37000, isDefault: false },
+      { id: 101, productId: "b0000000-0000-0000-0000-000000000001", sizeName: "Ly", extraPrice: 0, isDefault: true },
+      { id: 102, productId: "b0000000-0000-0000-0000-000000000001", sizeName: "100ml", extraPrice: 12000, isDefault: false },
+      { id: 103, productId: "b0000000-0000-0000-0000-000000000001", sizeName: "250ml", extraPrice: 37000, isDefault: false },
     ],
   },
   {
-    id: "p2",
+    id: "b0000000-0000-0000-0000-000000000002",
     categoryId: 1,
     name: "Cà hê sữa",
     slug: "ca-he-sua",
@@ -95,13 +95,13 @@ export const INITIAL_PRODUCTS: Product[] = [
     prepTimeMinutes: 4,
     tags: ["BEST_SELLER", "SIGNATURE"],
     variants: [
-      { id: 201, productId: "p2", sizeName: "Ly", extraPrice: 0, isDefault: true },
-      { id: 202, productId: "p2", sizeName: "100ml", extraPrice: 9000, isDefault: false },
-      { id: 203, productId: "p2", sizeName: "250ml", extraPrice: 36000, isDefault: false },
+      { id: 201, productId: "b0000000-0000-0000-0000-000000000002", sizeName: "Ly", extraPrice: 0, isDefault: true },
+      { id: 202, productId: "b0000000-0000-0000-0000-000000000002", sizeName: "100ml", extraPrice: 9000, isDefault: false },
+      { id: 203, productId: "b0000000-0000-0000-0000-000000000002", sizeName: "250ml", extraPrice: 36000, isDefault: false },
     ],
   },
   {
-    id: "p3",
+    id: "b0000000-0000-0000-0000-000000000003",
     categoryId: 1,
     name: "Bạc xĩuuuu",
     slug: "bac-xiuuuu",
@@ -113,13 +113,13 @@ export const INITIAL_PRODUCTS: Product[] = [
     prepTimeMinutes: 4,
     tags: ["BEST_SELLER"],
     variants: [
-      { id: 301, productId: "p3", sizeName: "Ly", extraPrice: 0, isDefault: true },
-      { id: 302, productId: "p3", sizeName: "100ml", extraPrice: 7000, isDefault: false },
-      { id: 303, productId: "p3", sizeName: "250ml", extraPrice: 28000, isDefault: false },
+      { id: 301, productId: "b0000000-0000-0000-0000-000000000003", sizeName: "Ly", extraPrice: 0, isDefault: true },
+      { id: 302, productId: "b0000000-0000-0000-0000-000000000003", sizeName: "100ml", extraPrice: 7000, isDefault: false },
+      { id: 303, productId: "b0000000-0000-0000-0000-000000000003", sizeName: "250ml", extraPrice: 28000, isDefault: false },
     ],
   },
   {
-    id: "p4",
+    id: "b0000000-0000-0000-0000-000000000004",
     categoryId: 2,
     name: "Cà hê múi huệ",
     slug: "ca-he-mui-hue",
@@ -131,13 +131,13 @@ export const INITIAL_PRODUCTS: Product[] = [
     prepTimeMinutes: 4,
     tags: ["SIGNATURE", "BEST_SELLER", "HOT"],
     variants: [
-      { id: 401, productId: "p4", sizeName: "Ly", extraPrice: 0, isDefault: true },
-      { id: 402, productId: "p4", sizeName: "100ml", extraPrice: 4000, isDefault: false },
-      { id: 403, productId: "p4", sizeName: "250ml", extraPrice: 37000, isDefault: false },
+      { id: 401, productId: "b0000000-0000-0000-0000-000000000004", sizeName: "Ly", extraPrice: 0, isDefault: true },
+      { id: 402, productId: "b0000000-0000-0000-0000-000000000004", sizeName: "100ml", extraPrice: 4000, isDefault: false },
+      { id: 403, productId: "b0000000-0000-0000-0000-000000000004", sizeName: "250ml", extraPrice: 37000, isDefault: false },
     ],
   },
   {
-    id: "p5",
+    id: "b0000000-0000-0000-0000-000000000005",
     categoryId: 2,
     name: "Cà hê trứng múi",
     slug: "ca-he-trung-mui",
@@ -149,9 +149,9 @@ export const INITIAL_PRODUCTS: Product[] = [
     prepTimeMinutes: 5,
     tags: ["SIGNATURE", "BEST_SELLER", "HOT"],
     variants: [
-      { id: 501, productId: "p5", sizeName: "Ly", extraPrice: 0, isDefault: true },
-      { id: 502, productId: "p5", sizeName: "100ml", extraPrice: 6000, isDefault: false },
-      { id: 503, productId: "p5", sizeName: "250ml", extraPrice: 40000, isDefault: false },
+      { id: 501, productId: "b0000000-0000-0000-0000-000000000005", sizeName: "Ly", extraPrice: 0, isDefault: true },
+      { id: 502, productId: "b0000000-0000-0000-0000-000000000005", sizeName: "100ml", extraPrice: 6000, isDefault: false },
+      { id: 503, productId: "b0000000-0000-0000-0000-000000000005", sizeName: "250ml", extraPrice: 40000, isDefault: false },
     ],
   },
 ];

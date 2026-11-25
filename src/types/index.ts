@@ -71,8 +71,26 @@ export interface CartItem {
 
 export type OrderType = 'OFFICE_DELIVERY' | 'TAKEAWAY' | 'GROUP_ORDER';
 export type OrderStatus = 'PENDING_PAYMENT' | 'CONFIRMED' | 'BREWING' | 'READY' | 'DELIVERING' | 'COMPLETED' | 'CANCELLED';
-export type PaymentStatus = 'UNPAID' | 'PAID' | 'REFUNDED';
+export type PaymentStatus = 'UNPAID' | 'PENDING' | 'PARTIAL' | 'PAID' | 'MANUAL_PAID' | 'REFUNDED';
 export type PaymentMethod = 'VIETQR_BANKING' | 'COD' | 'EWALLET';
+export type BankTransactionStatus = 'MATCHED' | 'UNDERPAID' | 'UNMATCHED' | 'DUPLICATE';
+
+export interface BankTransaction {
+  id: number;
+  sepayId: string;
+  gateway?: string | null;
+  transactionDate?: string | null;
+  accountNumber?: string | null;
+  transferType: string;
+  transferAmount: number;
+  content?: string | null;
+  referenceCode?: string | null;
+  matchedOrderCode?: string | null;
+  status: BankTransactionStatus;
+  rawPayload?: Record<string, any> | null;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface OrderItemRecord {
   id: string;
@@ -110,6 +128,9 @@ export interface Order {
   discountAmount: number;
   deliveryFee: number;
   totalAmount: number;
+  paidAmount?: number;
+  paidAt?: string | null;
+  paymentNote?: string | null;
   promotionCode?: string;
   baristaNotes?: string;
   shipperName?: string;

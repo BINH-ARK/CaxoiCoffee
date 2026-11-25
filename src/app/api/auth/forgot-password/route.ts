@@ -7,8 +7,12 @@ import {
   recordAuditLogInMySql,
 } from "@/lib/mysql";
 import { sendPasswordResetOtpEmail } from "@/lib/mail";
+import { safeEqualStrings } from "@/lib/password";
 import { getTrustedClientIp, verifySameOriginCsrf } from "@/lib/serverAuth";
 import { consumeRateLimit, createRateLimitResponse } from "@/lib/rateLimit";
+
+const GENERIC_FORGOT_ERROR =
+  "Thông tin tài khoản hoặc email không hợp lệ, hoặc tài khoản chưa đăng ký email khôi phục. Vui lòng liên hệ Chủ quán.";
 
 export async function POST(request: Request) {
   const csrfError = verifySameOriginCsrf(request);
@@ -16,11 +20,11 @@ export async function POST(request: Request) {
 
   try {
     const ip = getTrustedClientIp(request);
-    const rl = await consumeRateLimit(`auth:forgot:${ip}`, 10, 15 * 60 * 1000, 3 * 60 * 1000);
-    if (!rl.allowed) {
+    const ipRl = await consumeRateLimit(`auth:forgot:${ip}`, 10, 15 * 60 * 1000, 3 * 60 * 1000);
+    if (!ipRl.allowed) {
       return createRateLimitResponse(
-        rl.retryAfterSeconds,
-        `Bạn đã gửi quá nhiều yêu cầu khôi phục mật khẩu. Vui lòng thử lại sau ${rl.retryAfterSeconds} giây.`
+        ipRl.retryAfterSeconds,
+        `Bạn đã gửi quá nhiều yêu cầu khôi phục mật khẩu. Vui lòng thử lại sau ${ipRl.retryAfterSeconds} giây.`
       );
     }
 
@@ -35,13 +39,20 @@ export async function POST(request: Request) {
       );
     }
 
-    const staff = await getStaffByUsernameFromMySql(username);
-    if (!staff || !staff.isActive) {
-      return NextResponse.json(
-        { success: false, message: `Không tìm thấy tài khoản hoạt động với tên đăng nhập "${username}".` },
-        { status: 404 }
+    const userRl = await consumeRateLimit(
+      `auth:forgot:user:${username}`,
+      6,
+      15 * 60 * 1000,
+      3 * 60 * 1000
+    );
+    if (!userRl.allowed) {
+      return createRateLimitResponse(
+        userRl.retryAfterSeconds,
+        `Tài khoản này đã vượt quá số lần yêu cầu khôi phục mật khẩu. Vui lòng thử lại sau ${userRl.retryAfterSeconds} giây.`
       );
     }
+
+    const staff = await getStaffByUsernameFromMySql(username);
 
     if (action === "REQUEST_OTP") {
       const email = String(body.email || "").trim().toLowerCase();
@@ -52,15 +63,31 @@ export async function POST(request: Request) {
         );
       }
 
-      const registeredEmail = staff.email?.trim().toLowerCase() || "";
-      if (registeredEmail && registeredEmail !== email) {
+      const registeredEmail = staff?.email?.trim().toLowerCase() || "";
+      const isValidTarget = Boolean(
+        staff &&
+          staff.isActive &&
+          registeredEmail &&
+          safeEqualStrings(registeredEmail, email)
+      );
+
+      if (!isValidTarget || !staff) {
+        await recordAuditLogInMySql({
+          actorId: staff?.id || null,
+          actorUsername: username.slice(0, 60),
+          actorRole: staff?.role || "ANONYMOUS",
+          action: "AUTH_FORGOT_PASSWORD_REJECTED",
+          targetType: "AUTH",
+          targetId: staff?.id || null,
+          summary: `Từ chối yêu cầu OTP quên mật khẩu cho @${username.slice(0, 60)} (tài khoản không tồn tại, chưa có email đăng ký hoặc email không khớp)`,
+          ipAddress: ip,
+        });
+
         return NextResponse.json(
-          { success: false, message: "Email không khớp với email đã đăng ký của tài khoản này." },
+          { success: false, message: GENERIC_FORGOT_ERROR },
           { status: 400 }
         );
       }
-
-      const targetEmail = registeredEmail || email;
 
       const otp = String(crypto.randomInt(100000, 1000000));
       const saved = await savePasswordResetOtpInMySql(staff.id, otp, 10 * 60 * 1000);
@@ -71,11 +98,16 @@ export async function POST(request: Request) {
         );
       }
 
-      const mailRes = await sendPasswordResetOtpEmail(targetEmail, staff.fullName, staff.username, otp);
+      const mailRes = await sendPasswordResetOtpEmail(
+        registeredEmail,
+        staff.fullName,
+        staff.username,
+        otp
+      );
       const mailSent = mailRes.sent;
 
       console.info(
-        `[Cà Xòi Forgot Password OTP] Tài khoản @${staff.username} (${targetEmail}) -> Mã OTP: ${otp} (hiệu lực 10 phút)`
+        `[Cà Xòi Forgot Password] Đã khởi tạo OTP khôi phục mật khẩu cho @${staff.username} (mailSent=${mailSent})`
       );
 
       await recordAuditLogInMySql({
@@ -85,7 +117,7 @@ export async function POST(request: Request) {
         action: "AUTH_FORGOT_PASSWORD_OTP",
         targetType: "AUTH",
         targetId: staff.id,
-        summary: `Yêu cầu mã OTP đặt lại mật khẩu cho @${staff.username} tới ${targetEmail} (${mailSent ? "đã gửi email" : "lỗi gửi mail / chế độ local"})`,
+        summary: `Yêu cầu mã OTP đặt lại mật khẩu cho @${staff.username} tới email đã đăng ký (${mailSent ? "đã gửi email" : "lỗi gửi mail / chế độ local"})`,
         ipAddress: ip,
       });
 
@@ -107,7 +139,7 @@ export async function POST(request: Request) {
         mailSent,
         devOtp: !mailSent && isDev ? otp : undefined,
         message: mailSent
-          ? `Đã gửi mã OTP 6 số tới email ${targetEmail}. Vui lòng kiểm tra hộp thư (kể cả mục Spam)!`
+          ? `Đã gửi mã OTP 6 số tới email đã đăng ký của tài khoản. Vui lòng kiểm tra hộp thư (kể cả mục Spam)!`
           : `Đã tạo mã OTP khôi phục (chưa cấu hình Gmail SMTP nên hiển thị mã dùng thử nội bộ bên dưới).`,
       });
     }
@@ -132,6 +164,13 @@ export async function POST(request: Request) {
       if (newPassword !== confirmPassword) {
         return NextResponse.json(
           { success: false, message: "Mật khẩu xác nhận không khớp." },
+          { status: 400 }
+        );
+      }
+
+      if (!staff || !staff.isActive || !staff.email?.trim()) {
+        return NextResponse.json(
+          { success: false, message: "Mã OTP không hợp lệ hoặc đã hết hạn." },
           { status: 400 }
         );
       }

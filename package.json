@@ -8,7 +8,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "start:mac": "bash ./scripts/start-mac.sh",
-    "lint": "next lint"
+    "lint": "tsc --noEmit"
   },
   "engines": {
     "node": ">=20.0.0"
